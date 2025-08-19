@@ -1,0 +1,55 @@
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Tests / coverage / tooling caches
+.pytest_cache/
+.mypy_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+.cache/
+.ruff_cache/
+
+# Logs
+*.log
+
+# IDE / editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Secrets and environment
+.env
+.secret
+
+# Telethon / session artifacts
+*.session
+*.session-journal
+
+# Output artifacts
+output/
+
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal
+ccxt/
