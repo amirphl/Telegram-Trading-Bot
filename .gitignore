@@ -53,3 +53,4 @@ output/
 *.db-shm
 *.db-wal
 ccxt/
+cmd/channels.json
