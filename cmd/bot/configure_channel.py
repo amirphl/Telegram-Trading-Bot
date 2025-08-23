@@ -20,13 +20,33 @@ def save_channels(path: Path, items):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Append a channel configuration to channels file")
+    parser = argparse.ArgumentParser(
+        description="Append a channel configuration to channels file"
+    )
     parser.add_argument("--title", required=True, help="Channel title (human-readable)")
-    parser.add_argument("--id", default="", help="Channel id/username (e.g., @channel or numeric id)")
-    parser.add_argument("--policy", default="single_message", choices=["single_message", "windowed_messages"], help="Signal discovery policy")
-    parser.add_argument("--window-size", type=int, default=5, help="Window size for windowed_messages policy")
-    parser.add_argument("--enabled", type=int, default=1, help="1 to enable, 0 to disable")
-    parser.add_argument("--file", default=os.getenv("CHANNELS_FILE", "./configs/channels.json"), help="Channels JSON file path")
+    parser.add_argument(
+        "--id", default="", help="Channel id/username (e.g., @channel or numeric id)"
+    )
+    parser.add_argument(
+        "--policy",
+        default="single_message",
+        choices=["single_message", "windowed_messages"],
+        help="Signal discovery policy",
+    )
+    parser.add_argument(
+        "--window-size",
+        type=int,
+        default=5,
+        help="Window size for windowed_messages policy",
+    )
+    parser.add_argument(
+        "--enabled", type=int, default=1, help="1 to enable, 0 to disable"
+    )
+    parser.add_argument(
+        "--file",
+        default=os.getenv("CHANNELS_FILE", "./configs/channels.json"),
+        help="Channels JSON file path",
+    )
     parser.add_argument("--prompt", default="", help="Channel prompt")
 
     args = parser.parse_args()
@@ -50,4 +70,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main() 
+    main()
+

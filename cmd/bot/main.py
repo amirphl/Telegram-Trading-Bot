@@ -13,4 +13,5 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n[!] Stopped by user.") 
+        print("\n[!] Stopped by user.")
+
