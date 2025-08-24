@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 @dataclass
 class ChannelPolicyConfig:
     """Configuration for a channel's signal discovery policy"""
+
     channel_id: str
     channel_title: str
     policy: str  # "single_message" or "windowed_messages"
@@ -91,14 +92,16 @@ def _parse_channels_config() -> List[ChannelPolicyConfig]:
     legacy_channel_title = os.getenv("CHANNEL_TITLE")
     legacy_prompt = os.getenv("CHANNEL_PROMPT")
     if legacy_channel_id and legacy_channel_title:
-        channels.append(ChannelPolicyConfig(
-            channel_id=legacy_channel_id,
-            channel_title=legacy_channel_title,
-            policy="single_message",
-            window_size=5,
-            enabled=True,
-            prompt=legacy_prompt or None,
-        ))
+        channels.append(
+            ChannelPolicyConfig(
+                channel_id=legacy_channel_id,
+                channel_title=legacy_channel_title,
+                policy="single_message",
+                window_size=5,
+                enabled=True,
+                prompt=legacy_prompt or None,
+            )
+        )
 
     # CHANNELS_CONFIG (JSON string)
     channels_json = os.getenv("CHANNELS_CONFIG")
@@ -106,14 +109,16 @@ def _parse_channels_config() -> List[ChannelPolicyConfig]:
         try:
             channels_data = json.loads(channels_json)
             for c in channels_data:
-                channels.append(ChannelPolicyConfig(
-                    channel_id=c.get("channel_id", ""),
-                    channel_title=c.get("channel_title", ""),
-                    policy=c.get("policy", "single_message"),
-                    window_size=int(c.get("window_size", 5)),
-                    enabled=bool(c.get("enabled", True)),
-                    prompt=(c.get("prompt") or c.get("channel_prompt") or None),
-                ))
+                channels.append(
+                    ChannelPolicyConfig(
+                        channel_id=c.get("channel_id", ""),
+                        channel_title=c.get("channel_title", ""),
+                        policy=c.get("policy", "single_message"),
+                        window_size=int(c.get("window_size", 5)),
+                        enabled=bool(c.get("enabled", True)),
+                        prompt=(c.get("prompt") or c.get("channel_prompt") or None),
+                    )
+                )
         except (json.JSONDecodeError, KeyError, TypeError, ValueError):
             pass
 
@@ -125,20 +130,24 @@ def _parse_channels_config() -> List[ChannelPolicyConfig]:
             data = json.loads(p.read_text(encoding="utf-8"))
             if isinstance(data, list):
                 for c in data:
-                    channels.append(ChannelPolicyConfig(
-                        channel_id=str(c.get("channel_id", "")),
-                        channel_title=str(c.get("channel_title", "")),
-                        policy=str(c.get("policy", "single_message")),
-                        window_size=int(c.get("window_size", 5)),
-                        enabled=bool(c.get("enabled", True)),
-                        prompt=(c.get("prompt") or c.get("channel_prompt") or None),
-                    ))
+                    channels.append(
+                        ChannelPolicyConfig(
+                            channel_id=str(c.get("channel_id", "")),
+                            channel_title=str(c.get("channel_title", "")),
+                            policy=str(c.get("policy", "single_message")),
+                            window_size=int(c.get("window_size", 5)),
+                            enabled=bool(c.get("enabled", True)),
+                            prompt=(c.get("prompt") or c.get("channel_prompt") or None),
+                        )
+                    )
     except Exception:
         # Ignore file errors; continue with env-based config
         pass
 
     if not channels:
-        raise ValueError("No channels configured. Set CHANNELS_CONFIG or create configs/channels.json")
+        raise ValueError(
+            "No channels configured. Set CHANNELS_CONFIG or create configs/channels.json"
+        )
 
     # Deduplicate by (channel_id, channel_title)
     unique: Dict[str, ChannelPolicyConfig] = {}
@@ -152,7 +161,7 @@ def _parse_channels_config() -> List[ChannelPolicyConfig]:
 def load_config() -> Config:
     load_dotenv()
 
-    api_id = int(os.getenv("API_ID"))
+    api_id = int(os.getenv("API_ID") or 0)
     api_hash = os.getenv("API_HASH") or ""
     session_name = os.getenv("SESSION_NAME", "tg_session")
 
@@ -203,13 +212,19 @@ def load_config() -> Config:
 
     bitunix_api_key = os.getenv("BITUNIX_API_KEY") or None
     bitunix_secret = os.getenv("BITUNIX_SECRET") or None
-    bitunix_base_url = os.getenv("BITUNIX_BASE_URL", "https://fapi.bitunix.com").rstrip('/')
+    bitunix_base_url = os.getenv("BITUNIX_BASE_URL", "https://fapi.bitunix.com").rstrip(
+        "/"
+    )
     bitunix_language = os.getenv("BITUNIX_LANGUAGE", "en-US")
 
     order_quote = (os.getenv("ORDER_QUOTE") or "USDT").upper()
     order_notional = float(os.getenv("ORDER_NOTIONAL", "10"))
     max_price_deviation_pct = float(os.getenv("MAX_PRICE_DEVIATION_PCT", "0.02"))
-    enable_auto_execution = (os.getenv("ENABLE_AUTO_EXECUTION", "1") not in ("0", "false", "False"))
+    enable_auto_execution = os.getenv("ENABLE_AUTO_EXECUTION", "1") not in (
+        "0",
+        "false",
+        "False",
+    )
 
     return Config(
         api_id=api_id,
@@ -251,4 +266,5 @@ def load_config() -> Config:
         order_notional=order_notional,
         max_price_deviation_pct=max_price_deviation_pct,
         enable_auto_execution=enable_auto_execution,
-    ) 
+    )
+
