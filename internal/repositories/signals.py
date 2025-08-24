@@ -19,7 +19,9 @@ class TradeSignal:
     model_name: Optional[str]
 
 
-def insert_trade_signal(conn, sig: TradeSignal, busy_retries: int, busy_sleep_secs: float) -> None:
+def insert_trade_signal(
+    conn, sig: TradeSignal, busy_retries: int, busy_sleep_secs: float
+) -> None:
     sql = """
     INSERT INTO trade_signals (
       chat_id, message_id, token, position_type, entry_price, leverage,
@@ -53,4 +55,5 @@ def insert_trade_signal(conn, sig: TradeSignal, busy_retries: int, busy_sleep_se
         ),
         busy_retries=busy_retries,
         busy_sleep_secs=busy_sleep_secs,
-    ) 
+    )
+

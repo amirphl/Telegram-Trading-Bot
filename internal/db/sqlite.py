@@ -1,7 +1,6 @@
 import asyncio
 import sqlite3
 import time
-from typing import Tuple
 
 
 DDL_MESSAGES = """
@@ -104,9 +103,8 @@ def sql_execute_with_retry(
         except sqlite3.OperationalError as e:
             msg = str(e).lower()
             if (
-                ("database is locked" in msg or "database table is locked" in msg)
-                and attempts < busy_retries
-            ):
+                "database is locked" in msg or "database table is locked" in msg
+            ) and attempts < busy_retries:
                 attempts += 1
                 try:
                     loop = asyncio.get_event_loop()
@@ -117,4 +115,5 @@ def sql_execute_with_retry(
                 except Exception:
                     time.sleep(busy_sleep_secs)
                 continue
-            raise 
+            raise
+

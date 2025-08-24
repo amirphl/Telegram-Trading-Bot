@@ -19,7 +19,9 @@ class SubmittedPosition:
     error: Optional[str] = None
 
 
-def upsert_submitted_position(conn, sp: SubmittedPosition, busy_retries: int, busy_sleep_secs: float) -> None:
+def upsert_submitted_position(
+    conn, sp: SubmittedPosition, busy_retries: int, busy_sleep_secs: float
+) -> None:
     now = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat()
     sql = """
     INSERT INTO positions_submitted (
@@ -59,7 +61,15 @@ def upsert_submitted_position(conn, sp: SubmittedPosition, busy_retries: int, bu
     )
 
 
-def update_position_status(conn, chat_id: int, message_id: int, status: str, error: Optional[str], busy_retries: int, busy_sleep_secs: float) -> None:
+def update_position_status(
+    conn,
+    chat_id: int,
+    message_id: int,
+    status: str,
+    error: Optional[str],
+    busy_retries: int,
+    busy_sleep_secs: float,
+) -> None:
     now = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat()
     sql = """
     UPDATE positions_submitted
@@ -79,4 +89,5 @@ def update_position_status(conn, chat_id: int, message_id: int, status: str, err
         ),
         busy_retries=busy_retries,
         busy_sleep_secs=busy_sleep_secs,
-    ) 
+    )
+

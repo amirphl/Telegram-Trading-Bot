@@ -14,14 +14,18 @@ def message_to_record(msg: Message) -> Dict[str, Any]:
         "chat_id": msg.chat_id,
         "message_id": msg.id,
         "date_utc": msg.date.replace(tzinfo=None).isoformat() if msg.date else None,
-        "edit_date_utc": (msg.edit_date.replace(tzinfo=None).isoformat() if msg.edit_date else None),
+        "edit_date_utc": (
+            msg.edit_date.replace(tzinfo=None).isoformat() if msg.edit_date else None
+        ),
         "text": msg.message or None,
         "views": getattr(msg, "views", None),
         "forwards": getattr(msg, "forwards", None),
         "replies_count": getattr(getattr(msg, "replies", None), "replies", None),
         "post_author": getattr(msg, "post_author", None),
         "grouped_id": getattr(msg, "grouped_id", None),
-        "reply_to_msg_id": getattr(getattr(msg, "reply_to", None), "reply_to_msg_id", None),
+        "reply_to_msg_id": getattr(
+            getattr(msg, "reply_to", None), "reply_to_msg_id", None
+        ),
         "fwd_from_raw": dumps_json(fwd_raw) if fwd_raw else None,
         "via_bot_id": getattr(msg, "via_bot_id", None),
         "entities_raw": dumps_json(entities_raw) if entities_raw else None,
@@ -73,7 +77,9 @@ def upsert_message(
         rec["entities_raw"],
         rec["raw_json"],
     )
-    sql_execute_with_retry(conn, sql, vals, busy_retries=busy_retries, busy_sleep_secs=busy_sleep_secs)
+    sql_execute_with_retry(
+        conn, sql, vals, busy_retries=busy_retries, busy_sleep_secs=busy_sleep_secs
+    )
 
 
 async def download_media_if_any(
@@ -126,7 +132,9 @@ async def persist_message(
     busy_sleep_secs: float,
 ) -> List[Path]:
     rec = message_to_record(msg)
-    upsert_message(conn, rec, busy_retries=busy_retries, busy_sleep_secs=busy_sleep_secs)
+    upsert_message(
+        conn, rec, busy_retries=busy_retries, busy_sleep_secs=busy_sleep_secs
+    )
     saved_paths: List[Path] = []
     for p in await download_media_if_any(msg, channel_title_for_path, media_dir):
         insert_media(
@@ -140,4 +148,5 @@ async def persist_message(
             busy_sleep_secs=busy_sleep_secs,
         )
         saved_paths.append(p)
-    return saved_paths 
+    return saved_paths
+
