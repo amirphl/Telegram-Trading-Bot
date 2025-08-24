@@ -14,16 +14,20 @@ logger = logging.getLogger(__name__)
 async def backfill_recent(client, entity, ctx: BotContext, limit: int):
     if limit <= 0:
         return
-    
+
     # Get channel configuration for this entity
     channel_config = ctx.get_channel_config(entity.id)
     if not channel_config:
         logger.warning("No channel configuration found for entity %s", entity.id)
         return
-    
+
     channel_title_for_path = channel_config.channel_title.replace(" ", "_")
-    
-    logger.info("Backfilling last %d messages for channel '%s'…", limit, channel_config.channel_title)
+
+    logger.info(
+        "Backfilling last %d messages for channel '%s'…",
+        limit,
+        channel_config.channel_title,
+    )
     attempts = 0
     while True:
         try:
@@ -36,7 +40,9 @@ async def backfill_recent(client, entity, ctx: BotContext, limit: int):
                     busy_retries=ctx.cfg.sql_busy_retries,
                     busy_sleep_secs=ctx.cfg.sql_busy_sleep,
                 )
-            logger.info("Backfill complete for channel '%s'.", channel_config.channel_title)
+            logger.info(
+                "Backfill complete for channel '%s'.", channel_config.channel_title
+            )
             return
         except FloodWaitError as e:
             wait = int(getattr(e, "seconds", 30)) + 1
@@ -47,5 +53,11 @@ async def backfill_recent(client, entity, ctx: BotContext, limit: int):
             backoff = min(
                 ctx.cfg.max_backoff_secs, (2 ** min(attempts, 6)) + random.uniform(0, 1)
             )
-            logger.error("Backfill error for channel '%s': %s. Retrying in %ds…", channel_config.channel_title, e, int(backoff))
-            await asyncio.sleep(backoff) 
+            logger.error(
+                "Backfill error for channel '%s': %s. Retrying in %ds…",
+                channel_config.channel_title,
+                e,
+                int(backoff),
+            )
+            await asyncio.sleep(backoff)
+
