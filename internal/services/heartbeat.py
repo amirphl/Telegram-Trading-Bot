@@ -13,4 +13,5 @@ async def heartbeat_task(client: TelegramClient, interval_secs: int):
             await client.get_me()
         except Exception as e:
             logger.exception("Heartbeat error (handled by run loop): %s", e)
-        await asyncio.sleep(interval_secs) 
+        await asyncio.sleep(interval_secs)
+
