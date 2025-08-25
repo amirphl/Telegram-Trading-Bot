@@ -22,4 +22,5 @@ def _to_jsonable(obj: Any):
 
 
 def dumps_json(obj: Any) -> str:
-    return json.dumps(_to_jsonable(obj), ensure_ascii=False) 
+    return json.dumps(_to_jsonable(obj), ensure_ascii=False)
+
