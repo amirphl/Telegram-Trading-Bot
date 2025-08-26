@@ -60,6 +60,9 @@ class Config:
     openai_timeout_secs: int
     openai_base_url: Optional[str]
 
+    # Image upload service base URL
+    upload_base: str
+
     # Exchange/LBank settings
     lbank_api_key: Optional[str]
     lbank_secret: Optional[str]
@@ -199,6 +202,9 @@ def load_config() -> Config:
     openai_timeout_secs = int(os.getenv("OPENAI_TIMEOUT_SECS", "299"))
     openai_base_url = os.getenv("OPENAI_BASE_URL") or None
 
+    # Image upload service
+    upload_base = (os.getenv("UPLOAD_BASE") or "http://localhost:8080").rstrip("/")
+
     lbank_api_key = os.getenv("LBANK_API_KEY") or None
     lbank_secret = os.getenv("LBANK_SECRET") or None
     lbank_password = os.getenv("LBANK_PASSWORD") or None
@@ -251,6 +257,7 @@ def load_config() -> Config:
         openai_model=openai_model,
         openai_timeout_secs=openai_timeout_secs,
         openai_base_url=openai_base_url,
+        upload_base=upload_base,
         lbank_api_key=lbank_api_key,
         lbank_secret=lbank_secret,
         lbank_password=lbank_password,
@@ -267,4 +274,3 @@ def load_config() -> Config:
         max_price_deviation_pct=max_price_deviation_pct,
         enable_auto_execution=enable_auto_execution,
     )
-
