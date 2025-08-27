@@ -145,50 +145,53 @@ def submit_position_if_enabled(
         try:
             client = BitunixClient(cfg)
             side = "BUY" if (sig.position_type or "").lower() == "long" else "SELL"
-            symbol_pair = f"{BitunixClient._normalize_token_for_crypto(sig.token or '')}{cfg.order_quote}"
+            symbol_pair = client.swap_symbol(sig.token or "", cfg.order_quote)
+
             tp_price = None
             sl_price = None
             if sig.take_profits:
                 try:
-                    # if long, select min, if short, select max
                     if (sig.position_type or "").lower() == "long":
                         tp_price = float(min(sig.take_profits))
                     else:
                         tp_price = float(max(sig.take_profits))
-                    # tp_price = float(sig.take_profits[0])
                 except Exception:
                     tp_price = None
             if sig.stop_losses:
                 try:
-                    # if long, select max, if short, select min
                     if (sig.position_type or "").lower() == "long":
                         sl_price = float(max(sig.stop_losses))
                     else:
                         sl_price = float(min(sig.stop_losses))
-                    # sl_price = float(sig.stop_losses[0])
                 except Exception:
                     sl_price = None
-            r = client.place_order(
-                symbol=symbol_pair,
-                side=side,
-                qty=quantity,
-                order_type="MARKET" if order_type == "market" else "LIMIT",
-                price=(
-                    float(sig.entry_price)
-                    if (order_type == "limit" and sig.entry_price)
-                    else None
-                ),
-                trade_side="OPEN",
-                reduce_only=False,
-                tp_price=tp_price,
-                tp_stop_type="LAST_PRICE" if tp_price is not None else None,
-                tp_order_type="LIMIT" if tp_price is not None else None,
-                tp_order_price=tp_price if tp_price is not None else None,
-                sl_price=sl_price,
-                sl_stop_type="LAST_PRICE" if sl_price is not None else None,
-                sl_order_type="MARKET" if sl_price is not None else None,
-                sl_order_price=None,
-            )
+
+            params = {
+                "reduceOnly": False,
+                "tpPrice": tp_price,
+                "tpStopType": "LAST_PRICE" if tp_price is not None else None,
+                "tpOrderType": "LIMIT" if tp_price is not None else None,
+                "tpOrderPrice": tp_price if tp_price is not None else None,
+                "slPrice": sl_price,
+                "slStopType": "LAST_PRICE" if sl_price is not None else None,
+                "slOrderType": "MARKET" if sl_price is not None else None,
+                "slOrderPrice": None,
+            }
+            if sig.leverage is not None:
+                params["leverage"] = int(sig.leverage)
+
+            if order_type == "market":
+                r = client.market_order(
+                    symbol_pair, side=side, amount=quantity, params=params
+                )
+            else:
+                r = client.limit_order(
+                    symbol_pair,
+                    side=side,
+                    amount=quantity,
+                    price=float(sig.entry_price) if sig.entry_price else None,
+                    params=params,
+                )
             result = r
         except Exception as e:
             logger.error("Bitunix order error: %s", e)

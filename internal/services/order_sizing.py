@@ -14,6 +14,8 @@ def _symbol_pair_bitunix(token: str, quote: str) -> str:
     norm = BitunixClient._normalize_token_for_crypto(token)
     base = "".join(ch for ch in (norm or "").upper() if ch.isalnum())
     quote = (quote or "").upper()
+    if base.endswith(quote):
+        return base
     return f"{base}{quote}"
 
 
