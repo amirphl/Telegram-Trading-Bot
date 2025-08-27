@@ -88,10 +88,13 @@ class OpenAIExtractor:
             ],
             # "temperature": 0,
         }
+        logger.info("OpenAI extraction payload: %s", json.dumps(payload, indent=2))
         try:
             data = self._request(payload)
             content = data["choices"][0]["message"]["content"]
-            return json.loads(content)
+            response = json.loads(content)
+            logger.info("OpenAI extraction response: %s", json.dumps(response, indent=2))
+            return response
         except Exception as e:
             logger.warning("OpenAI extraction failed: %s", e)
             return None

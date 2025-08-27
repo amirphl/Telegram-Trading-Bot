@@ -7,7 +7,7 @@ from internal.repositories.positions import (
     upsert_submitted_position,
     update_position_status,
 )
-from internal.services.exchange import execute_signal
+from internal.services.exchange import ExecutionResult, execute_signal
 from internal.services.exchange_xt import XTClient
 from internal.services.exchange_bitunix import BitunixClient
 from internal.services.order_sizing import determine_order_quantity
@@ -24,7 +24,9 @@ def _dry_run_symbol(cfg: Config, token: Optional[str]) -> str:
     return XTClient(cfg).swap_symbol(t, cfg.order_quote)
 
 
-def submit_position_if_enabled(cfg: Config, conn, sig: TradeSignal) -> Optional[object]:
+def submit_position_if_enabled(
+    cfg: Config, conn, sig: TradeSignal
+) -> Optional[ExecutionResult]:
     if not cfg.enable_auto_execution:
         # Dry-run: log the order we would submit
         side = "buy" if (sig.position_type or "").lower() == "long" else "sell"
@@ -190,14 +192,8 @@ def submit_position_if_enabled(cfg: Config, conn, sig: TradeSignal) -> Optional[
             result = r
         except Exception as e:
             logger.error("Bitunix order error: %s", e)
-
-            class _Res:  # minimal adapter
-                success = False
-                order_id = None
-                status = "error"
-                error = str(e)
-
-            result = _Res()
+            r = ExecutionResult(False, None, "error", str(e))
+            result = r
 
     if result and getattr(result, "success", False):
         update_position_status(

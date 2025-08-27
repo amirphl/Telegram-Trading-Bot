@@ -342,10 +342,11 @@ class BitunixClient:
             body["slOrderPrice"] = str(sl_order_price)
 
         try:
-            logger.info("Bitunix: Placing order body=%s", body)
+            logger.info("Bitunix: Placing order body=%s", json.dumps(body, indent=2))
             data = self._request(
                 "POST", "/api/v1/futures/trade/place_order", body=body, auth=True
             )
+            logger.info("Bitunix: Placed order data=%s", json.dumps(data, indent=2))
             if data.get("code") == 0:
                 od = data.get("data") or {}
                 return ExecutionResult(
