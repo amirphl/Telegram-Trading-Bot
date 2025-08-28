@@ -8,6 +8,7 @@ from telethon.errors import (
     PhoneCodeInvalidError,
     rpcerrorlist,
 )
+from telethon.utils import get_peer_id
 
 from configs.config import Config
 from internal.db.sqlite import connect_db, init_db
@@ -56,12 +57,13 @@ async def _resolve_and_setup_channels(client, cfg: Config) -> dict:
                 prompt=getattr(channel_policy_config, "prompt", None),
             )
 
-            channels[entity.id] = channel_config
+            peer_id = get_peer_id(entity)
+            channels[peer_id] = channel_config
 
             logger.info(
-                "Configured channel '%s' (id=%s, policy=%s, window_size=%d)",
+                "Configured channel '%s' (peer_id=%s, policy=%s, window_size=%d)",
                 channel_config.channel_title,
-                entity.id,
+                peer_id,
                 policy.value,
                 channel_config.window_size,
             )
@@ -133,7 +135,7 @@ async def run_forever(cfg: Config):
 
             if not await client.is_user_authorized():
                 logger.info("Authorizing… (enter your phone/code/2FA)")
-                client.start()
+                await client.start()
 
             # Resolve and setup all configured channels
             channels = await _resolve_and_setup_channels(client, cfg)
@@ -147,7 +149,7 @@ async def run_forever(cfg: Config):
 
             hb = asyncio.create_task(heartbeat_task(client, cfg.heartbeat_secs))
 
-            client.run_until_disconnected()
+            await client.run_until_disconnected()
 
             hb.cancel()
             try:
@@ -183,7 +185,6 @@ async def run_forever(cfg: Config):
             continue
         finally:
             try:
-                client.disconnect()
+                await client.disconnect()
             except Exception:
                 pass
-
