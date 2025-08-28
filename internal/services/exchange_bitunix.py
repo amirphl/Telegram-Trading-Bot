@@ -3,9 +3,9 @@ import time
 import hashlib
 import uuid
 from typing import Any, Dict, List, Optional, Callable
-from urllib.parse import urlencode
 import logging
-import urllib.request
+
+import requests
 
 from configs.config import Config
 from internal.services.exchange import ExecutionResult
@@ -21,7 +21,6 @@ def _sha256_hex(s: str) -> str:
 def _build_query_concat(params: Optional[Dict[str, Any]]) -> str:
     if not params:
         return ""
-    # Sort by key ascending ASCII and concatenate key+value without separators
     items = sorted(params.items(), key=lambda kv: str(kv[0]))
     parts: List[str] = []
     for k, v in items:
@@ -30,21 +29,45 @@ def _build_query_concat(params: Optional[Dict[str, Any]]) -> str:
     return "".join(parts)
 
 
+def _infer_margin_coin_from_symbol(symbol: str) -> str:
+    s = (symbol or "").upper()
+    for coin in ("USDT", "USD", "USDC", "BTC", "ETH"):
+        if s.endswith(coin):
+            return coin
+    return "USDT"
+
+
 class BitunixClient:
     def __init__(
         self,
         cfg: Config,
         signer: Optional[Callable[[str, str, str, str, str], str]] = None,
     ) -> None:
-        """
-        signer(nonce, timestamp_ms, api_key, query_concat, body_string) -> signature string (hex)
-        If not provided, a default signer per docs is used.
-        """
         self.base_url = cfg.bitunix_base_url.rstrip("/")
         self.api_key = cfg.bitunix_api_key or ""
         self.secret = cfg.bitunix_secret or ""
         self.language = cfg.bitunix_language or "en-US"
         self.signer = signer or self._default_signer
+
+        # Build and enforce proxy usage
+        if not (cfg.proxy_host and cfg.proxy_port and cfg.proxy_type):
+            raise RuntimeError(
+                "Bitunix client requires a proxy (set PROXY_TYPE/PROXY_HOST/PROXY_PORT)"
+            )
+        ptype = (cfg.proxy_type or "").upper()
+        scheme = "http"
+        if ptype.startswith("SOCKS"):
+            scheme = "socks5h"  # ensure DNS via proxy to avoid SSL EOFs
+        auth = ""
+        if cfg.proxy_username and cfg.proxy_password:
+            auth = f"{cfg.proxy_username}:{cfg.proxy_password}@"
+        proxy_url = f"{scheme}://{auth}{cfg.proxy_host}:{int(cfg.proxy_port)}"
+        self._proxies: Dict[str, str] = {"http": proxy_url, "https": proxy_url}
+
+        self.session = requests.Session()
+        # Do not inherit env proxies; always use configured proxy
+        self.session.trust_env = False
+        self.timeout = 20
 
     @staticmethod
     def _normalize_token_for_crypto(token: str) -> str:
@@ -56,7 +79,8 @@ class BitunixClient:
     def swap_symbol(self, token: str, quote: str) -> str:
         base = self._normalize_token_for_crypto(token)
         quote = (quote or "").upper()
-        # Bitunix uses concatenated symbol, e.g., BTCUSDT
+        if base.endswith(quote):
+            return base
         return f"{base}{quote}"
 
     def _default_signer(
@@ -67,11 +91,9 @@ class BitunixClient:
         query_concat: str,
         body_string: str,
     ) -> str:
-        # digest = SHA256(nonce + timestamp + api-key + queryParams + body)
         digest = _sha256_hex(
             f"{nonce}{timestamp_ms}{api_key}{query_concat}{body_string}"
         )
-        # sign = SHA256(digest + secretKey)
         sign = _sha256_hex(f"{digest}{self.secret}")
         return sign
 
@@ -84,18 +106,14 @@ class BitunixClient:
         auth: bool = False,
     ) -> Dict[str, Any]:
         url = f"{self.base_url}{path}"
-        query = query or {}
+        query = dict(query or {})
 
         # Prepare body string without spaces if present
         body_string = ""
-        data_bytes = None
+        data: Optional[str] = None
         if body is not None:
             body_string = json.dumps(body, ensure_ascii=False, separators=(",", ":"))
-            data_bytes = body_string.encode("utf-8")
-
-        # Append query string to URL for GET/POST
-        if query:
-            url += f"?{urlencode(query)}"
+            data = body_string
 
         headers = {
             "Content-Type": "application/json",
@@ -108,8 +126,7 @@ class BitunixClient:
                     "Bitunix private endpoint requires BITUNIX_API_KEY and BITUNIX_SECRET"
                 )
             timestamp_ms = str(int(time.time() * 1000))
-            # 32-char random string (hex)
-            nonce = uuid.uuid4().hex  # 32 chars
+            nonce = uuid.uuid4().hex
             query_concat = _build_query_concat(query)
             signature = self.signer(
                 nonce, timestamp_ms, self.api_key, query_concat, body_string
@@ -123,12 +140,17 @@ class BitunixClient:
                 }
             )
 
-        req = urllib.request.Request(
-            url=url, method=method.upper(), headers=headers, data=data_bytes
+        resp = self.session.request(
+            method=method.upper(),
+            url=url,
+            params=query,
+            data=data,
+            headers=headers,
+            timeout=self.timeout,
+            proxies=self._proxies,
         )
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            return data
+        resp.raise_for_status()
+        return resp.json()
 
     # Public endpoints
     def fetch_tickers(
@@ -173,25 +195,58 @@ class BitunixClient:
     def get_available_balance(self, margin_coin: str) -> Optional[float]:
         try:
             data = self.get_account(margin_coin)
-            arr = data.get("data") or []
+            arr = data.get("data") or {}
             if not arr:
                 return None
-            available = arr[0].get("available")
+            available = arr.get("available")
             return float(available) if available is not None else None
         except Exception as e:
             logger.error("Bitunix: failed to fetch balance for %s: %s", margin_coin, e)
             return None
 
+    def change_leverage(self, margin_coin: str, symbol: str, leverage: int) -> bool:
+        body = {
+            "symbol": symbol,
+            "leverage": int(leverage),
+            "marginCoin": margin_coin,
+        }
+        try:
+            data = self._request(
+                "POST", "/api/v1/futures/account/change_leverage", body=body, auth=True
+            )
+            if data.get("code") == 0:
+                logger.info(
+                    "Bitunix: Changed leverage symbol=%s margin=%s lev=%s",
+                    symbol,
+                    margin_coin,
+                    leverage,
+                )
+                return True
+            logger.warning("Bitunix: Change leverage failed %s", json.dumps(data))
+            return False
+        except Exception as e:
+            logger.warning(
+                "Bitunix: Change leverage error symbol=%s error=%s", symbol, e
+            )
+            return False
+
     def market_order(
         self, symbol: str, side: str, amount: float, params: Optional[Dict] = None
     ) -> ExecutionResult:
         try:
+            # Change leverage first if provided
+            lev = (params or {}).get("leverage")
+            if lev is not None:
+                margin_coin = (params or {}).get(
+                    "marginCoin"
+                ) or _infer_margin_coin_from_symbol(symbol)
+                self.change_leverage(margin_coin, symbol, int(lev))
+
             reduce_only = bool((params or {}).get("reduceOnly", False))
             tp_price = (params or {}).get(
                 "stopLossPrice"
             )  # maintain naming parity if passed
             sl_price = (params or {}).get("takeProfitPrice")
-            # Actually map using dedicated keys if provided
             tp_price = (params or {}).get("tpPrice", tp_price)
             sl_price = (params or {}).get("slPrice", sl_price)
             effect = (params or {}).get("effect")
@@ -243,6 +298,14 @@ class BitunixClient:
         params: Optional[Dict] = None,
     ) -> ExecutionResult:
         try:
+            # Change leverage first if provided
+            lev = (params or {}).get("leverage")
+            if lev is not None:
+                margin_coin = (params or {}).get(
+                    "marginCoin"
+                ) or _infer_margin_coin_from_symbol(symbol)
+                self.change_leverage(margin_coin, symbol, int(lev))
+
             reduce_only = bool((params or {}).get("reduceOnly", False))
             tp_price = (params or {}).get("tpPrice")
             sl_price = (params or {}).get("slPrice")
@@ -323,7 +386,6 @@ class BitunixClient:
             body["clientId"] = client_id
         if effect:
             body["effect"] = effect
-        # TP/SL
         if tp_price is not None:
             body["tpPrice"] = str(tp_price)
         if tp_stop_type:

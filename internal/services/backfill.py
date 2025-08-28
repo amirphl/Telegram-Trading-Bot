@@ -3,6 +3,7 @@ import random
 import logging
 
 from telethon.errors import FloodWaitError
+from telethon.utils import get_peer_id
 
 from internal.repositories.messages import persist_message
 from internal.types.context import BotContext
@@ -16,9 +17,10 @@ async def backfill_recent(client, entity, ctx: BotContext, limit: int):
         return
 
     # Get channel configuration for this entity
-    channel_config = ctx.get_channel_config(entity.id)
+    peer_id = get_peer_id(entity)
+    channel_config = ctx.get_channel_config(peer_id)
     if not channel_config:
-        logger.warning("No channel configuration found for entity %s", entity.id)
+        logger.warning("No channel configuration found for entity %s", peer_id)
         return
 
     channel_title_for_path = channel_config.channel_title.replace(" ", "_")
@@ -60,4 +62,3 @@ async def backfill_recent(client, entity, ctx: BotContext, limit: int):
                 int(backoff),
             )
             await asyncio.sleep(backoff)
-

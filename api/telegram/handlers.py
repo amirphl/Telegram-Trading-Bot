@@ -12,6 +12,9 @@ from internal.services.signal_extraction import (
 logger = logging.getLogger(__name__)
 
 
+_unmonitored_logged: set[int] = set()
+
+
 def register_handlers(client, ctx: BotContext) -> None:
     @client.on(events.NewMessage())
     async def on_new_message(event):
@@ -20,14 +23,18 @@ def register_handlers(client, ctx: BotContext) -> None:
 
             # Check if this channel is being monitored
             if not ctx.is_channel_monitored(chat_id):
-                logger.warning("Channel %s is not being monitored", chat_id)
+                if chat_id not in _unmonitored_logged:
+                    logger.info("Ignoring unmonitored channel %s", chat_id)
+                    _unmonitored_logged.add(chat_id)
                 return
 
             channel_config = ctx.get_channel_config(chat_id)
             if not channel_config:
-                logger.warning(
-                    "No channel configuration found for chat_id: %s", chat_id
-                )
+                if chat_id not in _unmonitored_logged:
+                    logger.info(
+                        "No channel configuration found for chat_id: %s", chat_id
+                    )
+                    _unmonitored_logged.add(chat_id)
                 return
 
             # Persist the message to database
