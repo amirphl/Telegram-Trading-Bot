@@ -198,7 +198,7 @@ def load_config() -> Config:
     log_backup_count = int(os.getenv("LOG_BACKUP_COUNT", "14"))
 
     openai_api_key = os.getenv("OPENAI_API_KEY") or None
-    openai_model = os.getenv("OPENAI_MODEL", "gpt-5")
+    openai_model = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
     openai_timeout_secs = int(os.getenv("OPENAI_TIMEOUT_SECS", "299"))
     openai_base_url = os.getenv("OPENAI_BASE_URL") or None
 

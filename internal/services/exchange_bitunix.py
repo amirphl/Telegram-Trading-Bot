@@ -49,23 +49,24 @@ class BitunixClient:
         self.language = cfg.bitunix_language or "en-US"
         self.signer = signer or self._default_signer
 
-        # Build and enforce proxy usage
-        if not (cfg.proxy_host and cfg.proxy_port and cfg.proxy_type):
-            raise RuntimeError(
-                "Bitunix client requires a proxy (set PROXY_TYPE/PROXY_HOST/PROXY_PORT)"
-            )
-        ptype = (cfg.proxy_type or "").upper()
-        scheme = "http"
-        if ptype.startswith("SOCKS"):
-            scheme = "socks5h"  # ensure DNS via proxy to avoid SSL EOFs
-        auth = ""
-        if cfg.proxy_username and cfg.proxy_password:
-            auth = f"{cfg.proxy_username}:{cfg.proxy_password}@"
-        proxy_url = f"{scheme}://{auth}{cfg.proxy_host}:{int(cfg.proxy_port)}"
-        self._proxies: Dict[str, str] = {"http": proxy_url, "https": proxy_url}
+        # Build proxy configuration if available (optional)
+        self._proxies: Optional[Dict[str, str]] = None
+        if cfg.proxy_host and cfg.proxy_port and cfg.proxy_type:
+            ptype = (cfg.proxy_type or "").upper()
+            scheme = "http"
+            if ptype.startswith("SOCKS"):
+                scheme = "socks5h"  # ensure DNS via proxy to avoid SSL EOFs
+            auth = ""
+            if cfg.proxy_username and cfg.proxy_password:
+                auth = f"{cfg.proxy_username}:{cfg.proxy_password}@"
+            proxy_url = f"{scheme}://{auth}{cfg.proxy_host}:{int(cfg.proxy_port)}"
+            self._proxies = {"http": proxy_url, "https": proxy_url}
+            logger.info("Bitunix: Using proxy %s://%s:%s", scheme, cfg.proxy_host, cfg.proxy_port)
+        else:
+            logger.info("Bitunix: No proxy configured, using direct connection")
 
         self.session = requests.Session()
-        # Do not inherit env proxies; always use configured proxy
+        # Do not inherit env proxies; only use explicitly configured proxy
         self.session.trust_env = False
         self.timeout = 20
 
