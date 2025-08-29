@@ -7,8 +7,6 @@ set -e
 
 # Configuration
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PYTHON_CMD="python3"
-PIP_CMD="pip3"
 
 # Colors for output
 RED='\033[0;31m'
@@ -39,16 +37,114 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Function to setup pyenv if available
+setup_pyenv() {
+    # Check if pyenv is installed
+    if command_exists pyenv; then
+        print_status "Found pyenv, initializing..."
+        
+        # Initialize pyenv
+        export PYENV_ROOT="$HOME/.pyenv"
+        export PATH="$PYENV_ROOT/bin:$PATH"
+        
+        # Initialize pyenv in current shell
+        if command_exists pyenv; then
+            eval "$(pyenv init -)"
+            eval "$(pyenv virtualenv-init -)" 2>/dev/null || true
+        fi
+        
+        # Show current Python version
+        local current_version=$(pyenv version-name 2>/dev/null || echo "system")
+        print_status "Current pyenv Python version: $current_version"
+        
+        return 0
+    else
+        print_warning "pyenv not found, using system Python"
+        return 1
+    fi
+}
+
+# Function to detect Python and pip commands
+detect_python_pip() {
+    local python_cmd=""
+    local pip_cmd=""
+    
+    # Setup pyenv first
+    local using_pyenv=false
+    if setup_pyenv; then
+        using_pyenv=true
+    fi
+    
+    # Try different Python commands in order of preference
+    for cmd in python3 python; do
+        if command_exists "$cmd"; then
+            # Verify it's Python 3
+            local version=$($cmd --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
+            local major=$(echo "$version" | cut -d'.' -f1)
+            
+            if [ "$major" = "3" ]; then
+                python_cmd="$cmd"
+                print_status "Using Python command: $python_cmd (version $version)"
+                break
+            fi
+        fi
+    done
+    
+    if [ -z "$python_cmd" ]; then
+        print_error "No suitable Python 3 installation found"
+        if [ "$using_pyenv" = true ]; then
+            print_info "Install Python with pyenv: pyenv install 3.11.0 && pyenv global 3.11.0"
+        fi
+        return 1
+    fi
+    
+    # Detect pip command
+    if [ "$using_pyenv" = true ]; then
+        # With pyenv, prefer pyenv exec pip
+        if pyenv exec pip --version >/dev/null 2>&1; then
+            pip_cmd="pyenv exec pip"
+        elif pyenv exec pip3 --version >/dev/null 2>&1; then
+            pip_cmd="pyenv exec pip3"
+        fi
+    fi
+    
+    # Fallback to system pip
+    if [ -z "$pip_cmd" ]; then
+        for cmd in pip3 pip; do
+            if command_exists "$cmd"; then
+                # Verify it's associated with Python 3
+                local pip_python=$($cmd --version 2>&1 | grep -oE 'python [0-9]+\.[0-9]+' | cut -d' ' -f2 | cut -d'.' -f1)
+                if [ "$pip_python" = "3" ]; then
+                    pip_cmd="$cmd"
+                    break
+                fi
+            fi
+        done
+    fi
+    
+    if [ -z "$pip_cmd" ]; then
+        print_error "No suitable pip installation found"
+        return 1
+    fi
+    
+    print_status "Using pip command: $pip_cmd"
+    
+    # Export for use in other functions
+    export DETECTED_PYTHON_CMD="$python_cmd"
+    export DETECTED_PIP_CMD="$pip_cmd"
+    
+    return 0
+}
+
 # Function to check Python version
 check_python() {
     print_status "Checking Python installation..."
     
-    if ! command_exists "$PYTHON_CMD"; then
-        print_error "Python 3 is not installed. Please install Python 3.8 or higher."
+    if ! detect_python_pip; then
         return 1
     fi
     
-    local python_version=$($PYTHON_CMD --version 2>&1 | cut -d' ' -f2)
+    local python_version=$($DETECTED_PYTHON_CMD --version 2>&1 | cut -d' ' -f2)
     print_status "Found Python $python_version"
     
     # Check if version is 3.8 or higher
@@ -57,6 +153,9 @@ check_python() {
     
     if [ "$major_version" -lt 3 ] || ([ "$major_version" -eq 3 ] && [ "$minor_version" -lt 8 ]); then
         print_error "Python 3.8 or higher is required. Found: $python_version"
+        if command_exists pyenv; then
+            print_info "Install newer Python with pyenv: pyenv install 3.11.0 && pyenv global 3.11.0"
+        fi
         return 1
     fi
     
@@ -67,12 +166,7 @@ check_python() {
 check_pip() {
     print_status "Checking pip installation..."
     
-    if ! command_exists "$PIP_CMD"; then
-        print_error "pip3 is not installed. Please install pip3."
-        return 1
-    fi
-    
-    local pip_version=$($PIP_CMD --version 2>&1 | cut -d' ' -f2)
+    local pip_version=$($DETECTED_PIP_CMD --version 2>&1 | cut -d' ' -f2)
     print_status "Found pip $pip_version"
     
     return 0
@@ -96,9 +190,21 @@ create_venv() {
     fi
     
     print_status "Creating virtual environment..."
-    $PYTHON_CMD -m venv "$venv_dir"
+    
+    # Use detected Python command
+    $DETECTED_PYTHON_CMD -m venv "$venv_dir"
     
     print_status "Virtual environment created at $venv_dir"
+    
+    # Check if we should create .python-version for pyenv
+    if command_exists pyenv; then
+        local current_version=$(pyenv version-name 2>/dev/null || echo "")
+        if [ -n "$current_version" ] && [ "$current_version" != "system" ]; then
+            echo "$current_version" > "$PROJECT_DIR/.python-version"
+            print_status "Created .python-version file with: $current_version"
+        fi
+    fi
+    
     print_info "To activate: source venv/bin/activate"
     
     return 0
@@ -116,8 +222,8 @@ install_dependencies() {
         return 1
     fi
     
-    # Install dependencies
-    $PIP_CMD install -r requirements.txt
+    # Install dependencies using detected pip command
+    $DETECTED_PIP_CMD install -r requirements.txt
     
     print_status "Dependencies installed successfully"
     return 0
@@ -250,6 +356,7 @@ make_scripts_executable() {
         "scripts/restart.sh"
         "scripts/status.sh"
         "scripts/install.sh"
+        "scripts/setup-systemd.sh"
     )
     
     for script in "${scripts[@]}"; do
@@ -268,6 +375,16 @@ show_instructions() {
     echo
     print_status "Installation completed successfully!"
     echo
+    
+    if command_exists pyenv; then
+        print_info "pyenv detected - Python environment is managed by pyenv"
+        if [ -f "$PROJECT_DIR/.python-version" ]; then
+            local py_version=$(cat "$PROJECT_DIR/.python-version")
+            print_info "Project Python version: $py_version"
+        fi
+        echo
+    fi
+    
     print_info "Next steps:"
     print_info "1. Configure your settings:"
     print_info "   cp .env.example .env"
@@ -286,6 +403,16 @@ show_instructions() {
     print_info "   ./scripts/status.sh --logs"
     print_info "   ./scripts/status.sh --monitor"
     echo
+    
+    if command_exists pyenv; then
+        print_info "pyenv commands:"
+        print_info "   pyenv versions          # List installed Python versions"
+        print_info "   pyenv install 3.11.0    # Install specific Python version"
+        print_info "   pyenv global 3.11.0     # Set global Python version"
+        print_info "   pyenv local 3.11.0      # Set local Python version for this project"
+        echo
+    fi
+    
     print_warning "Important: Configure your .env file before starting the bot!"
 }
 

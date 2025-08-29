@@ -53,17 +53,128 @@ check_sudo() {
     fi
 }
 
+# Function to setup pyenv detection
+setup_pyenv_detection() {
+    # Check if pyenv is installed
+    if command -v pyenv >/dev/null 2>&1; then
+        print_status "Found pyenv, detecting Python installation..."
+        
+        # Initialize pyenv
+        export PYENV_ROOT="$HOME/.pyenv"
+        export PATH="$PYENV_ROOT/bin:$PATH"
+        
+        # Initialize pyenv in current shell
+        if command -v pyenv >/dev/null 2>&1; then
+            eval "$(pyenv init -)"
+            eval "$(pyenv virtualenv-init -)" 2>/dev/null || true
+        fi
+        
+        return 0
+    else
+        print_warning "pyenv not found, using system Python"
+        return 1
+    fi
+}
+
+# Function to detect Python executable path
+detect_python_path() {
+    local python_path=""
+    local using_pyenv=false
+    
+    # Setup pyenv if available
+    if setup_pyenv_detection; then
+        using_pyenv=true
+        
+        # Check if there's a .python-version file
+        if [ -f "$PROJECT_DIR/.python-version" ]; then
+            local python_version=$(cat "$PROJECT_DIR/.python-version")
+            print_status "Using Python version from .python-version: $python_version"
+        fi
+    fi
+    
+    # Try to find Python executable
+    for cmd in python3 python; do
+        if command -v "$cmd" >/dev/null 2>&1; then
+            # Verify it's Python 3
+            local version=$($cmd --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
+            local major=$(echo "$version" | cut -d'.' -f1)
+            
+            if [ "$major" = "3" ]; then
+                python_path=$(which "$cmd")
+                print_status "Using Python: $python_path (version $version)"
+                break
+            fi
+        fi
+    done
+    
+    if [ -z "$python_path" ]; then
+        print_error "No suitable Python 3 installation found"
+        return 1
+    fi
+    
+    echo "$python_path"
+    return 0
+}
+
+# Function to detect environment setup
+detect_environment() {
+    local env_path=""
+    local python_path=""
+    
+    # Detect Python path
+    if ! python_path=$(detect_python_path); then
+        return 1
+    fi
+    
+    # Check if using virtual environment
+    if [ -d "$PROJECT_DIR/venv" ]; then
+        local venv_python="$PROJECT_DIR/venv/bin/python"
+        if [ -f "$venv_python" ]; then
+            python_path="$venv_python"
+            env_path="$PROJECT_DIR/venv/bin:/usr/local/bin:/usr/bin:/bin"
+            print_status "Using virtual environment: $PROJECT_DIR/venv"
+        fi
+    else
+        # Build PATH with pyenv if available
+        if command -v pyenv >/dev/null 2>&1; then
+            local pyenv_root="$HOME/.pyenv"
+            env_path="$pyenv_root/shims:$pyenv_root/bin:/usr/local/bin:/usr/bin:/bin"
+            print_status "Using pyenv environment"
+        else
+            env_path="/usr/local/bin:/usr/bin:/bin"
+            print_status "Using system environment"
+        fi
+    fi
+    
+    # Export for use in service file creation
+    export DETECTED_PYTHON_PATH="$python_path"
+    export DETECTED_ENV_PATH="$env_path"
+    
+    return 0
+}
+
 # Function to create systemd service file
 create_service_file() {
     local temp_service="/tmp/$SERVICE_NAME.service"
     
     print_status "Creating systemd service file..."
     
-    # Get the current user's home directory
-    local user_home=$(eval echo ~$USER)
-    local project_path="$PROJECT_DIR"
+    # Detect environment
+    if ! detect_environment; then
+        return 1
+    fi
     
-    # Create service file with correct paths
+    local project_path="$PROJECT_DIR"
+    local python_path="$DETECTED_PYTHON_PATH"
+    local env_path="$DETECTED_ENV_PATH"
+    
+    print_status "Service configuration:"
+    print_info "  User: $USER"
+    print_info "  Working Directory: $project_path"
+    print_info "  Python Path: $python_path"
+    print_info "  Environment PATH: $env_path"
+    
+    # Create service file with detected configuration
     cat > "$temp_service" << EOF
 [Unit]
 Description=Telegram Trading Bot
@@ -75,8 +186,8 @@ Type=simple
 User=$USER
 Group=$USER
 WorkingDirectory=$project_path
-Environment=PATH=$project_path/venv/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=$project_path/venv/bin/python app.py
+Environment=PATH=$env_path
+ExecStart=$python_path app.py
 ExecReload=/bin/kill -HUP \$MAINPID
 KillMode=mixed
 Restart=always
@@ -127,6 +238,16 @@ show_commands() {
     echo
     print_status "Systemd service setup completed!"
     echo
+    
+    if command -v pyenv >/dev/null 2>&1; then
+        print_info "pyenv integration configured for systemd service"
+        if [ -f "$PROJECT_DIR/.python-version" ]; then
+            local py_version=$(cat "$PROJECT_DIR/.python-version")
+            print_info "Service will use Python version: $py_version"
+        fi
+        echo
+    fi
+    
     print_info "Service management commands:"
     print_info "  Start:   sudo systemctl start $SERVICE_NAME"
     print_info "  Stop:    sudo systemctl stop $SERVICE_NAME"
@@ -180,21 +301,34 @@ check_prerequisites() {
         exit 1
     fi
     
-    # Check if virtual environment exists
-    if [ ! -d "$PROJECT_DIR/venv" ]; then
-        print_error "Virtual environment not found. Run ./scripts/install.sh first"
-        exit 1
-    fi
-    
     # Check if app.py exists
     if [ ! -f "$PROJECT_DIR/app.py" ]; then
         print_error "app.py not found in project directory"
         exit 1
     fi
     
+    # Check Python installation
+    if ! detect_python_path >/dev/null; then
+        print_error "No suitable Python installation found"
+        exit 1
+    fi
+    
+    # Check if virtual environment exists (optional)
+    if [ -d "$PROJECT_DIR/venv" ]; then
+        print_status "Virtual environment found: $PROJECT_DIR/venv"
+    else
+        print_warning "No virtual environment found. Service will use system/pyenv Python."
+    fi
+    
     # Check if .env file exists
     if [ ! -f "$PROJECT_DIR/.env" ]; then
         print_warning ".env file not found. Make sure to create it before starting the service"
+    fi
+    
+    # Check if .python-version exists (for pyenv)
+    if [ -f "$PROJECT_DIR/.python-version" ]; then
+        local py_version=$(cat "$PROJECT_DIR/.python-version")
+        print_status "Found .python-version file: $py_version"
     fi
     
     print_status "Prerequisites check passed"
@@ -229,6 +363,12 @@ main() {
             echo "  --help, -h      Show this help message"
             echo
             echo "Default action: Setup systemd service"
+            echo
+            echo "pyenv Integration:"
+            echo "  - Automatically detects pyenv installation"
+            echo "  - Uses .python-version file if present"
+            echo "  - Configures proper PATH for pyenv shims"
+            echo "  - Supports both virtual environments and pyenv"
             ;;
         *)
             setup

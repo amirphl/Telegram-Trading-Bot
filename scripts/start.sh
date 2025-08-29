@@ -10,7 +10,6 @@ PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PID_FILE="$PROJECT_DIR/bot.pid"
 LOG_FILE="$PROJECT_DIR/output/logs/bot.log"
 ERROR_LOG="$PROJECT_DIR/output/logs/bot_error.log"
-PYTHON_CMD="python3"
 
 # Colors for output
 RED='\033[0;31m'
@@ -29,6 +28,66 @@ print_warning() {
 
 print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Function to setup pyenv if available
+setup_pyenv() {
+    # Check if pyenv is installed
+    if command -v pyenv >/dev/null 2>&1; then
+        print_status "Found pyenv, initializing..."
+        
+        # Initialize pyenv
+        export PYENV_ROOT="$HOME/.pyenv"
+        export PATH="$PYENV_ROOT/bin:$PATH"
+        
+        # Initialize pyenv in current shell
+        if command -v pyenv >/dev/null 2>&1; then
+            eval "$(pyenv init -)"
+            eval "$(pyenv virtualenv-init -)" 2>/dev/null || true
+        fi
+        
+        # Check if there's a .python-version file
+        if [ -f "$PROJECT_DIR/.python-version" ]; then
+            local python_version=$(cat "$PROJECT_DIR/.python-version")
+            print_status "Using Python version from .python-version: $python_version"
+        fi
+        
+        return 0
+    else
+        print_warning "pyenv not found, using system Python"
+        return 1
+    fi
+}
+
+# Function to detect Python command
+detect_python() {
+    local python_cmd=""
+    
+    # Setup pyenv first
+    setup_pyenv
+    
+    # Try different Python commands in order of preference
+    for cmd in python3 python; do
+        if command -v "$cmd" >/dev/null 2>&1; then
+            # Verify it's Python 3
+            local version=$($cmd --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
+            local major=$(echo "$version" | cut -d'.' -f1)
+            
+            if [ "$major" = "3" ]; then
+                python_cmd="$cmd"
+                print_status "Using Python command: $python_cmd (version $version)"
+                break
+            fi
+        fi
+    done
+    
+    if [ -z "$python_cmd" ]; then
+        print_error "No suitable Python 3 installation found"
+        return 1
+    fi
+    
+    echo "$python_cmd"
+    return 0
 }
 
 # Function to check if bot is running
@@ -57,6 +116,12 @@ start_bot() {
         return 1
     fi
     
+    # Detect Python command
+    local python_cmd
+    if ! python_cmd=$(detect_python); then
+        return 1
+    fi
+    
     # Create output directories
     mkdir -p "$(dirname "$LOG_FILE")"
     mkdir -p "$(dirname "$ERROR_LOG")"
@@ -68,15 +133,17 @@ start_bot() {
     fi
     
     # Check Python dependencies
-    if ! $PYTHON_CMD -c "import telethon, ccxt, openai" 2>/dev/null; then
+    print_status "Checking Python dependencies..."
+    if ! $python_cmd -c "import telethon, ccxt, openai" 2>/dev/null; then
         print_error "Missing Python dependencies. Run: pip install -r requirements.txt"
+        print_info "Or if using pyenv: pyenv exec pip install -r requirements.txt"
         return 1
     fi
     
     print_status "Starting Telegram Trading Bot..."
     
     # Start the bot in background
-    nohup $PYTHON_CMD app.py >> "$LOG_FILE" 2>> "$ERROR_LOG" &
+    nohup $python_cmd app.py >> "$LOG_FILE" 2>> "$ERROR_LOG" &
     local pid=$!
     
     # Save PID
@@ -87,6 +154,7 @@ start_bot() {
     
     if ps -p "$pid" > /dev/null 2>&1; then
         print_status "Bot started successfully with PID $pid"
+        print_status "Python command: $python_cmd"
         print_status "Logs: $LOG_FILE"
         print_status "Error logs: $ERROR_LOG"
         print_status "Use './scripts/stop.sh' to stop the bot"

@@ -35,6 +35,26 @@ print_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
 }
 
+# Function to setup pyenv if available
+setup_pyenv() {
+    # Check if pyenv is installed
+    if command -v pyenv >/dev/null 2>&1; then
+        # Initialize pyenv
+        export PYENV_ROOT="$HOME/.pyenv"
+        export PATH="$PYENV_ROOT/bin:$PATH"
+        
+        # Initialize pyenv in current shell
+        if command -v pyenv >/dev/null 2>&1; then
+            eval "$(pyenv init -)" 2>/dev/null || true
+            eval "$(pyenv virtualenv-init -)" 2>/dev/null || true
+        fi
+        
+        return 0
+    else
+        return 1
+    fi
+}
+
 # Function to check if bot is running
 is_running() {
     if [ -f "$PID_FILE" ]; then
@@ -60,6 +80,75 @@ get_process_info() {
         ps -p "$pid" -o pid,ppid,user,start,etime,pcpu,pmem,comm 2>/dev/null || echo "  Could not retrieve process details"
         echo
     fi
+}
+
+# Function to show Python environment info
+show_python_info() {
+    echo "Python Environment:"
+    echo "=================="
+    
+    # Setup pyenv if available
+    local using_pyenv=false
+    if setup_pyenv; then
+        using_pyenv=true
+        print_status "pyenv detected"
+        
+        # Show current pyenv version
+        local current_version=$(pyenv version-name 2>/dev/null || echo "system")
+        echo "  Current pyenv version: $current_version"
+        
+        # Show project-specific version if .python-version exists
+        if [ -f "$PROJECT_DIR/.python-version" ]; then
+            local project_version=$(cat "$PROJECT_DIR/.python-version")
+            echo "  Project Python version: $project_version"
+        fi
+        
+        # Show available versions
+        local versions=$(pyenv versions --bare 2>/dev/null | head -5 | tr '\n' ' ')
+        if [ -n "$versions" ]; then
+            echo "  Available versions: $versions"
+        fi
+    else
+        print_info "Using system Python (pyenv not found)"
+    fi
+    
+    # Show Python executable info
+    for cmd in python3 python; do
+        if command -v "$cmd" >/dev/null 2>&1; then
+            local python_path=$(which "$cmd" 2>/dev/null)
+            local python_version=$($cmd --version 2>&1 | cut -d' ' -f2)
+            echo "  $cmd: $python_path (version $python_version)"
+            break
+        fi
+    done
+    
+    # Show pip info
+    local pip_cmd=""
+    if [ "$using_pyenv" = true ] && pyenv exec pip --version >/dev/null 2>&1; then
+        pip_cmd="pyenv exec pip"
+    elif command -v pip3 >/dev/null 2>&1; then
+        pip_cmd="pip3"
+    elif command -v pip >/dev/null 2>&1; then
+        pip_cmd="pip"
+    fi
+    
+    if [ -n "$pip_cmd" ]; then
+        local pip_version=$($pip_cmd --version 2>&1 | cut -d' ' -f2)
+        echo "  pip: $pip_cmd (version $pip_version)"
+    fi
+    
+    # Check virtual environment
+    if [ -d "$PROJECT_DIR/venv" ]; then
+        local venv_python="$PROJECT_DIR/venv/bin/python"
+        if [ -f "$venv_python" ]; then
+            local venv_version=$($venv_python --version 2>&1 | cut -d' ' -f2)
+            print_status "Virtual environment: $PROJECT_DIR/venv (Python $venv_version)"
+        fi
+    else
+        print_warning "No virtual environment found"
+    fi
+    
+    echo
 }
 
 # Function to show log tail
@@ -122,6 +211,14 @@ check_config() {
         print_error ".env file missing"
     fi
     
+    # Check .python-version file
+    if [ -f "$PROJECT_DIR/.python-version" ]; then
+        local py_version=$(cat "$PROJECT_DIR/.python-version")
+        print_status ".python-version file exists: $py_version"
+    else
+        print_info "No .python-version file (using system/global Python)"
+    fi
+    
     # Check required directories
     local dirs=("output/logs" "output/media")
     for dir in "${dirs[@]}"; do
@@ -170,6 +267,7 @@ show_status() {
         fi
     fi
     
+    show_python_info
     check_config
     show_disk_usage
     
