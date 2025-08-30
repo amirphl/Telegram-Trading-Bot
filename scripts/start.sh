@@ -15,6 +15,7 @@ ERROR_LOG="$PROJECT_DIR/output/logs/bot_error.log"
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Function to print colored output
@@ -28,6 +29,10 @@ print_warning() {
 
 print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
+}
+
+print_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
 }
 
 # Function to setup pyenv if available
@@ -62,6 +67,7 @@ setup_pyenv() {
 # Function to detect Python command
 detect_python() {
     local python_cmd=""
+    local python_version=""
     
     # Setup pyenv first
     setup_pyenv
@@ -75,7 +81,7 @@ detect_python() {
             
             if [ "$major" = "3" ]; then
                 python_cmd="$cmd"
-                print_status "Using Python command: $python_cmd (version $version)"
+                python_version="$version"
                 break
             fi
         fi
@@ -86,6 +92,10 @@ detect_python() {
         return 1
     fi
     
+    # Print status after we've determined the command (not in the capture)
+    print_status "Using Python command: $python_cmd (version $python_version)"
+    
+    # Only echo the command name for capture
     echo "$python_cmd"
     return 0
 }
