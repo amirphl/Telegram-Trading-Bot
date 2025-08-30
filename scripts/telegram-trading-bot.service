@@ -7,9 +7,9 @@ Wants=network.target
 Type=simple
 User=amirphl
 Group=amirphl
-WorkingDirectory=/home/amirphl/telegram-trading-bot
-Environment=PATH=/home/amirphl/telegram-trading-bot/venv/bin
-ExecStart=/home/amirphl/telegram-trading-bot/venv/bin/python app.py
+WorkingDirectory=/home/amirphl/Telegram-Trading-Bot
+Environment=PATH=/home/amirphl/Telegram-Trading-Bot/venv/bin
+ExecStart=/home/amirphl/Telegram-Trading-Bot/venv/bin/python app.py
 ExecReload=/bin/kill -HUP $MAINPID
 KillMode=mixed
 Restart=always
@@ -22,7 +22,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/home/amirphl/telegram-trading-bot
+ReadWritePaths=/home/amirphl/Telegram-Trading-Bot
 
 # Resource limits
 LimitNOFILE=65536

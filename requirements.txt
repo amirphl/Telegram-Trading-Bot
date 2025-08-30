@@ -2,4 +2,4 @@ telethon
 ccxt
 dotenv
 requests
-
+openai
