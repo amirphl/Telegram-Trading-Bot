@@ -1,0 +1,67 @@
+GROUP 4 - ASYNC RUNTIME, RECOVERY, AND LIFECYCLE
+Item count: 9
+
+[ ] #14 - Move blocking network work off the event loop [HIGH]
+Problem: urllib, CCXT, SQLite waits, and time.sleep execute synchronously inside an
+async Telegram handler, blocking messages, heartbeat, and reconnection.
+Locations: internal/services/openai_client.py:25-36;
+internal/services/exchange_lbank.py:45-59, 114-124
+Done when: async clients or bounded worker threads/queues isolate blocking work and
+concurrency, timeout, and backpressure behavior is tested.
+
+[ ] #18 - Backfill from a durable checkpoint [HIGH]
+Problem: startup always fetches only the last BACKFILL messages, which defaults to
+three. Longer outages leave permanent ingestion and processing gaps.
+Locations: configs/config.py:70; internal/services/runner.py:62
+Done when: each channel has a durable high-water mark and restart catches up every
+missing message with pagination and idempotent processing.
+
+[ ] #24 - Cancel heartbeat tasks on every exit path [HIGH]
+Problem: heartbeat is cancelled only after run_until_disconnected returns normally.
+If it raises, reconnecting can leave the old task alive and create another one.
+Location: internal/services/runner.py:64-73
+Done when: task ownership uses try/finally or a task group and tests prove no task
+survives disconnect, error, cancellation, or shutdown.
+
+[ ] #29 - Back off or stop on authentication errors [MEDIUM]
+Problem: the authentication exception branch increments attempts but does not sleep,
+so invalid/expired credentials can cause a tight reconnect/login loop.
+Location: internal/services/runner.py:75-80
+Done when: terminal authentication failures stop with instructions, while retryable
+ones use a bounded backoff without repeated interactive prompts.
+
+[ ] #30 - Bound backfill retries and allow live-service recovery [MEDIUM]
+Problem: backfill retries forever on persistent errors and blocks entry into live
+monitoring.
+Location: internal/services/backfill.py:15-38
+Done when: failures have bounded retries, durable resume state, operator visibility,
+and an explicit policy for continuing or stopping live monitoring.
+
+[ ] #31 - Make heartbeat failures trigger useful recovery [MEDIUM]
+Problem: heartbeat catches and prints every error but does not notify the runner,
+even though its message says the run loop will handle the error.
+Location: internal/services/heartbeat.py:6-11
+Done when: consecutive health-check failures feed a supervised reconnection decision
+and transient failures do not cause flapping.
+
+[ ] #35 - Remove event-loop-blocking SQLite lock retries [MEDIUM]
+Problem: sql_execute_with_retry explicitly calls time.sleep when an event loop is
+running, blocking all asynchronous work.
+Location: internal/db/sqlite.py:92-120
+Done when: database work is isolated or asynchronous and lock retries use bounded,
+non-blocking backoff with observable failure.
+
+[ ] #37 - Close database and background resources reliably [MEDIUM]
+Problem: the SQLite connection is never closed and shutdown cleanup only disconnects
+Telegram.
+Location: internal/services/runner.py:20-98
+Done when: cancellation and normal/error shutdown close the DB, cancel/await every
+task, flush logs, and leave no session or WAL operation half-finished.
+
+[ ] #40 - Reset reconnect backoff after a healthy connection [MEDIUM]
+Problem: attempts is not reset after successful connection and monitoring, so a
+later disconnect can inherit an old, unnecessarily large failure count.
+Location: internal/services/runner.py:41-93
+Done when: the counter resets after a defined healthy milestone and behavior is
+covered by reconnect tests.
+
