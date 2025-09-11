@@ -1,0 +1,45 @@
+GROUP 6 - SETUP, DOCUMENTATION, AND TESTING
+Item count: 6
+
+[ ] #8 - Add reproducible dependency and Python-version metadata [HIGH]
+Problem: there is no requirements.txt, pyproject.toml, setup file, lockfile, or
+supported Python version. Required packages cannot be installed reproducibly.
+Done when: one packaging workflow declares runtime/dev dependencies and Python
+compatibility, uses pinned or constrained versions, and installs in clean CI.
+
+[ ] #9 - Fix the documented bot entrypoint [HIGH]
+Problem: python cmd/bot/main.py fails with ModuleNotFoundError: configs because the
+repository root is absent from the direct script import path.
+Location: cmd/bot/main.py:1-16
+Done when: one supported module/console entrypoint works from a clean checkout and
+the README uses that exact command.
+
+[ ] #10 - Make the application entrypoint installable and runnable [HIGH]
+Problem: app.py currently fails at import time when undeclared python-dotenv is not
+already installed.
+Location: app.py:1-11
+Done when: clean-environment installation followed by the supported startup command
+reaches validated configuration without an import error.
+
+[ ] #25 - Add automated tests and continuous integration [HIGH]
+Problem: unittest discovery finds no tests and fails while importing configs.
+cmd/test/openai_sample.py is a manual network script, not an automated test suite.
+Locations: cmd/test/openai_sample.py:1-57; configs/__init__.py:1
+Done when: unit/integration tests cover ingestion, extraction validation, database
+state, idempotency, exchange mocks, reconnects, and safety defaults in CI.
+
+[ ] #41 - Repair installation and configuration documentation [LOW]
+Problem: README references missing requirements.txt and configs/config.example.py,
+uses a placeholder clone URL, and does not document environment variables.
+Location: README.md:39-68
+Done when: instructions are tested from a clean checkout and include a safe
+.env.example with no secrets, configuration meanings, and dry-run startup.
+
+[ ] #42 - Align repository metadata and feature claims with reality [LOW]
+Problem: README.md and .trae/rules/project_rules.md are untracked; the latter contains
+unrelated Odoo guidance. README claims risk control, position management, heartbeat
+monitoring, and historical processing that are absent or incomplete.
+Locations: README.md:1-102; .trae/rules/project_rules.md:1-51
+Done when: intended documentation is version-controlled, unrelated rules are removed
+or replaced, and every feature claim maps to tested behavior or an explicit roadmap.
+
