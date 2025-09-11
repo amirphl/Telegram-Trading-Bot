@@ -1,0 +1,69 @@
+GROUP 2 - TRADE EXECUTION AND FINANCIAL SAFETY
+Item count: 9
+Status: completed 2026-08-06
+
+[x] #2 - Make automatic execution opt-in and parse booleans strictly [CRITICAL]
+Problem: ENABLE_AUTO_EXECUTION defaults to enabled. Empty, FALSE, no, and mistyped
+values can also enable real-money execution.
+Location: configs/config.py:90-93
+Done when: execution defaults off, only documented true values enable it, startup
+prints the selected mode, and production execution requires an explicit safeguard.
+
+[x] #3 - Make message-to-order submission idempotent [CRITICAL]
+Problem: reprocessing a message overwrites its position as pending and submits a
+new order without checking the existing state.
+Location: internal/services/executor.py:9-32
+Done when: one durable atomic claim controls submission and repeated processing of
+the same chat_id/message_id cannot create another entry order.
+
+[x] #4 - Prevent duplicate orders after ambiguous network failures [CRITICAL]
+Problem: transient create_order errors are retried blindly. The first request may
+have succeeded even though its response was lost.
+Location: internal/services/exchange_lbank.py:114-124
+Done when: a stable client order ID is used where supported, ambiguous results are
+reconciled with the exchange, and create-order calls are never blindly repeated.
+
+[x] #5 - Implement the promised position semantics [CRITICAL]
+Problem: short becomes a normal market sell; leverage is unused; stop-loss and
+take-profit values are stored but never placed on the exchange.
+Locations: internal/services/exchange_lbank.py:94-118;
+internal/services/executor.py:32
+Done when: spot versus derivatives mode is explicit, short/leverage behavior is
+correct for the selected market, and protective orders have a tested lifecycle.
+
+[x] #6 - Make ticker/deviation validation fail closed [CRITICAL]
+Problem: fetch_price hides failures. Execution then falls back to the extracted
+entry price and bypasses the current-price deviation check.
+Location: internal/services/exchange_lbank.py:45-51, 103-112
+Done when: a missing or stale current price rejects execution, and price source,
+timestamp, and deviation are stored for audit.
+
+[x] #19 - Persist accurate execution results [HIGH]
+Problem: positions store quantity=0.0, never save result.order_id, discard the
+exchange status, and replace it with the generic status submitted.
+Location: internal/services/executor.py:13-53
+Done when: requested/filled quantity, order ID, client order ID, exchange status,
+fees, price, and timestamps are persisted and subsequently reconciled.
+
+[x] #20 - Normalize and validate trading symbols [HIGH]
+Problem: BTCUSDT becomes BTCUSDT/USDT, values such as $BTC pass validation, and the
+constructed symbol is not checked against exchange markets.
+Location: internal/services/exchange_lbank.py:40-43, 84-100
+Done when: token format is strict, quote suffixes are handled correctly, and the
+resolved active exchange market is stored before order submission.
+
+[x] #21 - Apply exchange precision, limits, and account checks [HIGH]
+Problem: amount precision, minimum amount/cost, contract size, market activity,
+market type, available balance, and supported order types are not checked.
+Location: internal/services/exchange_lbank.py:68-74, 98-118
+Done when: markets are loaded once, CCXT formatting/limits are applied, balance and
+capability checks fail closed, and boundary cases have tests.
+
+[x] #22 - Reconcile database state with external order state [HIGH]
+Problem: database writes and exchange submission are not atomic. If the order is
+accepted but the status update fails, the database remains pending and retry can
+create another trade.
+Locations: internal/services/executor.py:13-53;
+internal/repositories/positions.py:22-82
+Done when: an explicit state machine and reconciliation worker recover every
+pending/unknown submission without duplicating orders.
