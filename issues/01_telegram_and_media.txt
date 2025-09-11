@@ -1,0 +1,63 @@
+GROUP 1 - TELEGRAM INGESTION AND MEDIA HANDLING
+Item count: 8
+Status: completed 2026-08-06
+
+[x] #1 - Correct Telegram channel-ID matching [CRITICAL]
+Problem: runner.py stores entity.id, while handlers.py compares it with Telethon's
+marked event.chat_id. Channel event IDs normally include the -100 prefix, so live
+posts can all be rejected.
+Locations: internal/services/runner.py:51-55; api/telegram/handlers.py:12-15
+Done when: both values use one canonical Telethon peer-ID representation and an
+integration test proves that a target channel post reaches persist_message().
+
+[x] #11 - Process supported text and captioned signal formats [HIGH]
+Problem: signal_extraction.py only processes messages that have media and no text.
+Text-only signals and images with captions are ignored.
+Location: internal/services/signal_extraction.py:13-22
+Done when: supported formats are explicit, text-only and captioned-image cases are
+covered by tests, and unsupported messages are recorded with a reason.
+
+[x] #12 - Validate actual media types before AI processing [HIGH]
+Problem: any msg.media value is treated as an image. PDFs, video, audio, stickers,
+web previews, and other documents may be sent to OpenAI as image/jpeg.
+Locations: internal/services/signal_extraction.py:13-17;
+internal/services/openai_client.py:38-45
+Done when: only explicitly supported image MIME types are accepted and detected
+content type is used in the data URL.
+
+[x] #13 - Enforce media size and resource limits [HIGH]
+Problem: media is downloaded and fully base64-encoded without file-size, pixel,
+memory, disk-usage, or request-cost limits.
+Locations: internal/repositories/messages.py:79-93;
+internal/services/openai_client.py:38-45
+Done when: configurable limits are enforced before download/encoding and rejected
+media is logged with a durable reason.
+
+[x] #23 - Sanitize channel-derived filesystem paths [HIGH]
+Problem: channel_title_for_path only replaces spaces. Slashes and traversal-like
+components can create unintended paths outside the expected media hierarchy.
+Locations: internal/services/runner.py:53-55;
+internal/repositories/messages.py:88-90
+Done when: filenames use a strict safe-character policy or a stable channel ID,
+and a resolved-path containment check prevents escape from MEDIA_DIR.
+
+[x] #32 - Handle edited and deleted Telegram posts [MEDIUM]
+Problem: only NewMessage is registered. Corrected signals are ignored and deleted
+posts leave messages, media, signals, and position records behind indefinitely.
+Location: api/telegram/handlers.py:8-28
+Done when: edit/delete policies are explicitly implemented and integration-tested,
+including the policy for already-submitted orders.
+
+[x] #34 - Prevent duplicate media downloads and add cleanup [MEDIUM]
+Problem: filenames contain the current timestamp instead of stable Telegram media
+identity, so reprocessing can create duplicate files. No cleanup policy exists.
+Location: internal/repositories/messages.py:86-93
+Done when: storage is deterministic/idempotent and retention or garbage collection
+removes orphaned and expired files safely.
+
+[x] #38 - Support or explicitly reject multi-image signals [MEDIUM]
+Problem: OpenAIExtractor analyzes only image_paths[0], silently discarding the rest
+of a multi-image signal or album.
+Location: internal/services/openai_client.py:53-58
+Done when: all supported album images are analyzed within configured limits, or the
+message is rejected with an explicit and durable reason.
