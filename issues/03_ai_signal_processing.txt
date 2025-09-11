@@ -1,0 +1,48 @@
+GROUP 3 - AI EXTRACTION AND SIGNAL PROCESSING
+Item count: 6
+Status: completed 2026-08-06
+
+[x] #7 - Add deterministic pre-trade validation and risk controls [CRITICAL]
+Problem: AI output can trigger execution after checking only token length and
+long/short. Entry, age, confidence, stops, targets, and risk limits are optional.
+Locations: internal/services/signal_extraction.py:34-56;
+internal/services/exchange_lbank.py:84-96
+Done when: deterministic validation includes signal age, allowlists, required
+fields, price relationships, exposure limits, and an approval policy.
+
+[x] #15 - Preserve and classify OpenAI failures [HIGH]
+Problem: all request, authentication, timeout, quota, parsing, and response-shape
+errors are swallowed and returned as None.
+Location: internal/services/openai_client.py:77-82
+Done when: failures are classified, safely logged, stored against the message, and
+reported without exposing credentials or sensitive content.
+
+[x] #16 - Add a durable extraction queue and retry state [HIGH]
+Problem: an extraction failure is permanently lost; there is no pending, retrying,
+failed, or completed processing record.
+Location: internal/services/signal_extraction.py:29-32
+Done when: processing is resumable and idempotent, retry policy is bounded, and
+operators can inspect/replay failed jobs without automatically duplicating trades.
+
+[x] #17 - Define and implement historical signal processing [HIGH]
+Problem: backfill only persists messages and never calls signal extraction, despite
+the documented historical-processing feature.
+Location: internal/services/backfill.py:10-27
+Done when: the intended historical policy is explicit and backfilled messages are
+either processed safely or marked intentionally non-executable.
+
+[x] #26 - Strictly validate model output against a schema [MEDIUM]
+Problem: prompt instructions are treated as validation. Types, finite numeric
+values, ranges, list ordering, token syntax, and cross-field rules are unchecked.
+Locations: internal/services/openai_client.py:60-80;
+internal/services/signal_extraction.py:34-47
+Done when: strict structured output plus local schema/business-rule validation
+rejects malformed, non-finite, inconsistent, or incomplete signals.
+
+[x] #28 - Handle missing AI and exchange credentials consistently [MEDIUM]
+Problem: a missing OpenAI key silently disables extraction, while missing LBank
+credentials still permit execution attempts using empty strings.
+Locations: internal/services/openai_client.py:47-49;
+internal/services/exchange_lbank.py:29-38
+Done when: startup validates credentials for the selected mode, disabled features
+are clearly reported, and live mode cannot start with incomplete credentials.
