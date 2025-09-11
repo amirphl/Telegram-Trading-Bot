@@ -1,0 +1,24 @@
+TELEGRAM TRADING BOT - ISSUE BACKLOG
+
+This backlog contains all 42 findings from the repository audit.
+Every issue group contains fewer than 10 items.
+
+Files:
+
+1. 01_telegram_and_media.txt      8 items  Telegram ingestion and media handling [COMPLETED]
+2. 02_trade_execution_safety.txt  9 items  Order correctness and financial safety [COMPLETED]
+3. 03_ai_signal_processing.txt    6 items  OpenAI extraction and signal workflow [COMPLETED]
+4. 04_runtime_reliability.txt     9 items  Async behavior, recovery, and lifecycle
+5. 05_data_and_configuration.txt  4 items  Validation, persistence, and credentials
+6. 06_setup_docs_and_tests.txt    6 items  Installation, documentation, and testing
+
+Total: 42 items
+
+Suggested implementation order:
+
+1. Disable auto-execution and fix trade idempotency.
+2. Correct Telegram channel-ID matching.
+3. Correct exchange semantics and add hard risk controls.
+4. Make external operations asynchronous and recoverable.
+5. Add durable signal-processing state and database migrations.
+6. Repair packaging, documentation, and automated tests.
