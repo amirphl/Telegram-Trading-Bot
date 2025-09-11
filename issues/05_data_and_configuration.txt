@@ -1,0 +1,33 @@
+GROUP 5 - DATA INTEGRITY AND CONFIGURATION
+Item count: 4
+
+[ ] #27 - Validate all configuration at startup [MEDIUM]
+Problem: missing API_ID raises int(None), required strings can be empty, and negative
+amounts, percentages, timeouts, intervals, sleeps, and retry counts are accepted.
+Location: configs/config.py:53-123
+Done when: typed validation produces actionable errors, defines allowed ranges, and
+performs no filesystem/network side effects until configuration is valid.
+
+[ ] #33 - Make message/media persistence transactional or recoverable [MEDIUM]
+Problem: the message autocommits before media download and media insertion. Failures
+leave partial database records or orphaned files.
+Location: internal/repositories/messages.py:120-143
+Done when: partial states are explicit and repairable, file moves are atomic where
+possible, and a reconciliation/cleanup path handles every failure point.
+
+[ ] #36 - Add database migrations and integrity constraints [MEDIUM]
+Problem: CREATE TABLE IF NOT EXISTS cannot upgrade deployed schemas. Signal/position
+enums, positive quantities, ranges, relationships, and lifecycle states lack useful
+constraints; positions_submitted also lacks a message foreign key.
+Location: internal/db/sqlite.py:7-77
+Done when: versioned migrations are repeatable, backups/rollback are documented,
+and constraints/indexes match the application state machine.
+
+[ ] #39 - Place CCXT credentials in the correct configuration fields [MEDIUM]
+Problem: LBANK_PASSWORD is put inside CCXT options rather than the documented
+top-level password credential. If required, authentication will not receive it as
+intended.
+Location: internal/services/exchange_lbank.py:29-38
+Done when: requiredCredentials is checked, credentials are mapped correctly for
+LBank, secrets are never logged, and an authenticated non-trading check is tested.
+
