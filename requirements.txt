@@ -1,5 +1,8 @@
 telethon
-ccxt
 dotenv
 requests
 openai
+# Runtime dependencies (Python 3.10+)
+ccxt==4.5.71
+python-dotenv==1.2.2
+Telethon==1.44.0
