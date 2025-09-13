@@ -1,27 +1,24 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import List, Optional
 
-from pkg.serialization import dumps_json
 from internal.db.sqlite import sql_execute_with_retry
+from pkg.serialization import dumps_json
 
 
 @dataclass
 class TradeSignal:
     chat_id: int
     message_id: int
-    token: Optional[str]
-    position_type: Optional[str]  # "long" or "short"
-    entry_price: Optional[float]
-    leverage: Optional[float]
-    stop_losses: List[float]
-    take_profits: List[float]
-    model_name: Optional[str]
+    token: str | None
+    position_type: str | None  # "long" or "short"
+    entry_price: float | None
+    leverage: float | None
+    stop_losses: list[float]
+    take_profits: list[float]
+    model_name: str | None
 
 
-def insert_trade_signal(
-    conn, sig: TradeSignal, busy_retries: int, busy_sleep_secs: float
-) -> None:
+def insert_trade_signal(conn, sig: TradeSignal, busy_retries: int, busy_sleep_secs: float) -> None:
     sql = """
     INSERT INTO trade_signals (
       chat_id, message_id, token, position_type, entry_price, leverage,
@@ -37,7 +34,7 @@ def insert_trade_signal(
       model_name=excluded.model_name
     ;
     """
-    now = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     sql_execute_with_retry(
         conn,
         sql,
@@ -56,4 +53,3 @@ def insert_trade_signal(
         busy_retries=busy_retries,
         busy_sleep_secs=busy_sleep_secs,
     )
-
