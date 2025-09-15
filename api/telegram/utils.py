@@ -1,4 +1,14 @@
-async def resolve_channel(client, cfg):
+from telethon import utils as telethon_utils
+
+from configs.config import Config
+
+
+def canonical_peer_id(entity) -> int:
+    """Return the marked peer ID used by Telethon message events."""
+    return int(telethon_utils.get_peer_id(entity))
+
+
+async def resolve_channel(client, cfg: Config):
     if cfg.channel_id:
         chan = (cfg.channel_id or "").strip()
         # If looks like username (starts with @ or contains letters), let Telethon resolve it directly
@@ -20,4 +30,3 @@ async def resolve_channel(client, cfg):
     raise ValueError(
         "Channel not found. Provide CHANNEL_ID (preferred) or ensure CHANNEL_TITLE matches exactly."
     )
-
