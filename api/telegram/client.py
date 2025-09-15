@@ -1,12 +1,10 @@
-from typing import Tuple
-
 from telethon import TelegramClient
 from telethon.network.connection import ConnectionTcpAbridged
 
 from configs.config import Config
 
 
-def _build_proxy_tuple(cfg: Config) -> Tuple:
+def _build_proxy_tuple(cfg: Config) -> tuple | None:
     if cfg.proxy_type in ("SOCKS5", "HTTP") and cfg.proxy_host and cfg.proxy_port:
         return (
             cfg.proxy_type.lower(),
@@ -16,7 +14,7 @@ def _build_proxy_tuple(cfg: Config) -> Tuple:
             cfg.proxy_username,
             cfg.proxy_password,
         )
-    return ()
+    return None
 
 
 def build_client(cfg: Config) -> TelegramClient:
@@ -32,4 +30,3 @@ def build_client(cfg: Config) -> TelegramClient:
         timeout=10,
         flood_sleep_threshold=60,
     )
-
