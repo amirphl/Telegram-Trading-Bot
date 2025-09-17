@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools==80.9.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "telegram-lbank-trading-bot"
+version = "0.1.0"
+description = "A safety-focused Telegram signal ingestion and LBank execution service"
+readme = "README.md"
+requires-python = ">=3.10,<3.15"
+license = "MIT"
+authors = [{ name = "Amir M Pirhosseinloo" }]
+dynamic = ["dependencies"]
+
+[project.optional-dependencies]
+# The automated suite uses unittest from the standard library, so no additional
+# test runner is required. Keep this extra as the single documented dev workflow.
+dev = []
+
+[project.scripts]
+telegram-trading-bot = "telegram_trading_bot.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["api*", "cmd*", "configs*", "internal*", "pkg*", "telegram_trading_bot*"]
+exclude = ["tests*"]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+[tool.ruff.lint]
+ignore = [
+    "BLE001",
+]
