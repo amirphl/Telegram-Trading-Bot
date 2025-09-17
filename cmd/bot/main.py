@@ -1,17 +1,6 @@
-import asyncio
+"""Compatibility module; prefer the installed ``telegram-trading-bot`` command."""
 
-from configs.config import load_config
-from internal.services.runner import run_forever
-
-
-def main():
-    cfg = load_config()
-    asyncio.run(run_forever(cfg))
-
+from telegram_trading_bot.cli import main
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("\n[!] Stopped by user.")
-
+    raise SystemExit(main())
