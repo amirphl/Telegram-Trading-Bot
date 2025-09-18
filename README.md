@@ -1,83 +1,111 @@
 # Telegram Trading Bot
 
-A Telegram bot that monitors multiple channels for trading signals and can execute trades automatically on multiple cryptocurrency exchanges.
+A safety-focused Python service that monitors one or more Telegram channels,
+extracts structured trading signals from text and images with OpenAI, and can
+submit orders through supported cryptocurrency exchanges. Automatic execution
+is disabled by default.
+
+> **Financial risk:** This software can place real orders when explicitly
+> configured. Test in sandbox mode, use least-privilege API credentials with
+> withdrawals disabled, and verify exchange behavior before enabling live trading.
 
 ## Features
 
-- **Multi-Channel Support**: Monitor multiple Telegram channels simultaneously
-- **Flexible Signal Discovery Policies**: Configure different signal extraction strategies per channel
-- **Multi-Exchange Support**: Trade on XT, Bitunix, or LBank exchanges
-- **Futures Trading**: Support for leverage, stop losses, and take profits
-- **Message Persistence**: Store all messages and media files locally
-- **OpenAI Integration**: Use AI to extract trading signals from text and images
-- **Optional Proxy Support**: Configure proxy for exchanges that require it
-- **Comprehensive Logging**: Structured logging with file rotation
-- **Testing Utilities**: Tools for debugging and validating signal extraction
+- Monitor multiple Telegram channels with independent extraction policies.
+- Process complete signals individually or combine a rolling message window.
+- Apply a custom OpenAI extraction prompt per channel.
+- Persist messages, validated media, extraction jobs, signals, and order state in SQLite.
+- Validate model output, token allowlists, signal age, confidence, and exposure limits.
+- Retry durable extraction jobs and recover interrupted backfills and submissions.
+- Execute XT and Bitunix futures orders, with an LBank/CCXT execution and
+  reconciliation implementation available in the service layer.
+- Support leverage, stop losses, take profits, price-deviation checks, and
+  protective-order reconciliation where provided by the selected backend.
+- Rotate structured logs and optionally connect through an HTTP or SOCKS5 proxy.
 
-## Signal Discovery Policies
+## Supported environment
 
-The bot supports two signal discovery policies that can be configured per channel:
+- CPython 3.10 through 3.14
+- SQLite
+- Telegram API credentials
+- OpenAI credentials when signal extraction is enabled
+- Credentials for the selected exchange when automatic execution is enabled
 
-### 1. Single Message Policy (`single_message`)
-- Processes each message individually
-- Suitable for channels where each message contains complete trading information
-- Faster processing and lower API costs
-- Default policy for backward compatibility
+## Installation
 
-### 2. Windowed Messages Policy (`windowed_messages`)
-- Processes the last N messages together for context
-- Useful for channels where trading signals are spread across multiple messages
-- Configurable window size (default: 5 messages)
-- Better signal detection for fragmented information
+From a clean checkout:
 
-## Configuration
-
-### Environment Variables
-
-#### Basic Telegram Configuration
 ```bash
-API_ID=your_telegram_api_id
-API_HASH=your_telegram_api_hash
-SESSION_NAME=tg_session
+git clone https://github.com/amirphl/Telegram-Trading-Bot.git
+cd Telegram-Trading-Bot
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install ".[dev]"
+cp .env.example .env
 ```
 
-#### Exchange Selection
+On Windows PowerShell, activate with `.venv\Scripts\Activate.ps1`. Fill in the
+required values in `.env`; never commit that file.
+
+Installing from `pyproject.toml` also installs the dependencies declared through
+`requirements.txt` and provides the `telegram-trading-bot` command.
+
+## Validate configuration
+
+Validate every setting without creating the database or media directory and
+without contacting Telegram, OpenAI, or an exchange:
+
 ```bash
-# Choose target exchange: 'xt', 'bitunix', or 'lbank'
-EXCHANGE=xt
+telegram-trading-bot --check-config
 ```
 
-#### Proxy Configuration (Optional)
+A default-safe configuration reports `auto_execution=False` and
+`signal_extraction=False`. Invalid settings produce an actionable error and a
+non-zero exit status.
+
+## Start the bot
+
+The supported installed entry point is:
+
 ```bash
-PROXY_TYPE=SOCKS5  # or HTTP
-PROXY_HOST=127.0.0.1
-PROXY_PORT=1080
-PROXY_USERNAME=username  # optional
-PROXY_PASSWORD=password  # optional
+telegram-trading-bot
 ```
 
-#### Channel Configuration
+The compatibility entry point remains available:
 
-##### Legacy Single Channel (Backward Compatible)
 ```bash
-CHANNEL_ID=@your_channel_username
-CHANNEL_TITLE=Your Channel Name
-CHANNEL_PROMPT="Custom prompt for this channel"  # optional
+python app.py
 ```
 
-##### Multi-Channel Configuration (Recommended)
+The first interactive run may request the Telegram account phone number, login
+code, and two-factor password. Later runs reuse the local Telethon session. Stop
+the service with `Ctrl+C`.
+
+## Channel configuration
+
+For a single channel, use its marked numeric ID, public username, or title:
+
+```bash
+CHANNEL_ID=@signals_channel
+CHANNEL_TITLE=Signals Channel
+CHANNEL_PROMPT="Extract crypto entries and risk-management levels"
+```
+
+For multiple channels, use inline JSON:
+
 ```bash
 CHANNELS_CONFIG='[
   {
-    "channel_id": "@channel1",
-    "channel_title": "Trading Signals Channel",
+    "channel_id": "@complete_signals",
+    "channel_title": "Complete Signals",
     "policy": "single_message",
     "enabled": true,
-    "prompt": "Extract crypto trading signals from this message"
+    "prompt": "Extract one complete trade signal"
   },
   {
-    "channel_id": "@channel2", 
-    "channel_title": "Analysis Channel",
+    "channel_id": "@fragmented_analysis",
+    "channel_title": "Analysis",
     "policy": "windowed_messages",
     "window_size": 10,
     "enabled": true
@@ -85,324 +113,159 @@ CHANNELS_CONFIG='[
 ]'
 ```
 
-##### File-Based Channel Configuration
+Alternatively, set `CHANNELS_FILE=./configs/channels.json` and place the same JSON
+array in that file. Duplicate channel ID/title pairs are ignored.
+
+### Discovery policies
+
+`single_message` processes each message independently. It is appropriate when a
+channel publishes the symbol, direction, entry, and protection levels together.
+
+`windowed_messages` combines the most recent `window_size` messages in chronological
+order. It is useful when an analysis and its entry or risk levels arrive separately.
+The default window size is 5.
+
+## Configuration reference
+
+Blank values in `.env.example` contain no credentials. Percentages are decimal
+fractions, so `0.02` means 2%.
+
+### Telegram, storage, and media
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `API_ID`, `API_HASH` | required | Telegram application credentials from `my.telegram.org`. |
+| `SESSION_NAME` | `tg_session` | Local Telethon session name or path. |
+| `CHANNEL_ID`, `CHANNEL_TITLE` | blank | Legacy single-channel selector; set at least one. |
+| `CHANNEL_PROMPT` | blank | Optional prompt for the legacy channel. |
+| `CHANNELS_CONFIG`, `CHANNELS_FILE` | blank | Inline or file-based multi-channel configuration. |
+| `PROXY_TYPE` | blank | `SOCKS5` or `HTTP`; blank disables proxy use. |
+| `PROXY_HOST`, `PROXY_PORT` | blank | Required together when a proxy is enabled. |
+| `PROXY_USERNAME`, `PROXY_PASSWORD` | blank | Optional proxy authentication. |
+| `DB_PATH` | `./tg_channel.db` | SQLite database file. |
+| `MEDIA_DIR` | `./output/media` | Root for validated downloaded images. |
+| `BACKFILL` | `3` | Recent messages recovered at startup. |
+| `MEDIA_MAX_BYTES` | `10485760` | Maximum size of one image. |
+| `MEDIA_MAX_TOTAL_BYTES` | `20971520` | Maximum aggregate image size per message or album. |
+| `MEDIA_MAX_PIXELS`, `MEDIA_MAX_IMAGES` | `25000000`, `4` | Decode and image-count limits. |
+| `MEDIA_MAX_DISK_BYTES` | `1073741824` | Managed-media storage quota. |
+| `MEDIA_RETENTION_DAYS` | `0` | Age cleanup threshold; `0` disables age-based removal. |
+
+### OpenAI extraction and approval
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `SIGNAL_EXTRACTION_ENABLED` | `false` | Enables OpenAI extraction and its durable worker. |
+| `OPENAI_API_KEY` | blank | Required when extraction is enabled. |
+| `OPENAI_MODEL` | `gpt-4o-mini` | Model identifier for the configured endpoint. |
+| `OPENAI_TIMEOUT_SECS`, `OPENAI_BASE_URL` | `30`, blank | Request timeout and optional compatible endpoint. |
+| `UPLOAD_BASE` | `http://localhost:8080` | Optional image-upload service used before inline fallback. |
+| `SIGNAL_APPROVAL_MODE` | `manual` | `manual` stores for review; `automatic` permits eligible execution. |
+| `SIGNAL_TOKEN_ALLOWLIST` | blank | Comma-separated uppercase assets eligible for execution. |
+| `SIGNAL_MAX_AGE_SECS` | `300` | Maximum age for execution eligibility. |
+| `SIGNAL_MIN_CONFIDENCE` | `0.75` | Required model confidence from 0 through 1. |
+| `SIGNAL_MAX_OPEN_POSITIONS` | `3` | Portfolio-wide open-position limit. |
+| `SIGNAL_MAX_TOTAL_NOTIONAL` | `100` | Maximum aggregate configured quote notional. |
+| `EXTRACTION_MAX_ATTEMPTS` | `3` | Bounded attempts per durable extraction job. |
+| `EXTRACTION_RETRY_BASE_SECS` | `15` | Base delay for retryable extraction failures. |
+| `EXTRACTION_WORKER_INTERVAL_SECS` | `5` | Durable queue polling interval. |
+| `HISTORICAL_SIGNAL_POLICY` | `store_only` | `store_only` or `extract_no_execute`; history never auto-executes. |
+
+The structured result includes the token, long/short direction, entry price,
+leverage, stop losses, take profits, signal classification, and confidence.
+
+## Exchange configuration
+
+Select the active backend with `EXCHANGE=xt` or `EXCHANGE=bitunix`.
+
+### XT futures
+
 ```bash
-CHANNELS_FILE=./configs/channels.json
+EXCHANGE=xt
+XT_API_KEY=
+XT_SECRET=
+XT_PASSWORD=
+XT_MARGIN_MODE=cross
 ```
 
-Create `configs/channels.json`:
-```json
-[
-  {
-    "channel_id": "@your_channel",
-    "channel_title": "Channel Name",
-    "policy": "single_message",
-    "enabled": true,
-    "prompt": "Custom extraction prompt"
-  }
-]
-```
+### Bitunix futures
 
-#### OpenAI Configuration
 ```bash
-OPENAI_API_KEY=your_openai_api_key
-OPENAI_MODEL=gpt-4.1-mini  # default model
-OPENAI_TIMEOUT_SECS=299
-OPENAI_BASE_URL=https://api.openai.com  # optional
-```
-
-#### Image Upload Service
-```bash
-UPLOAD_BASE=http://localhost:8080  # for image processing
-```
-
-#### Exchange Configuration
-
-##### XT Exchange (Futures)
-```bash
-XT_API_KEY=your_xt_api_key
-XT_SECRET=your_xt_secret
-XT_PASSWORD=your_xt_password  # optional
-XT_MARGIN_MODE=cross  # or 'isolated'
-```
-
-##### Bitunix Exchange (Futures)
-```bash
-BITUNIX_API_KEY=your_bitunix_api_key
-BITUNIX_SECRET=your_bitunix_secret
+EXCHANGE=bitunix
+BITUNIX_API_KEY=
+BITUNIX_SECRET=
 BITUNIX_BASE_URL=https://fapi.bitunix.com
 BITUNIX_LANGUAGE=en-US
 ```
 
-##### LBank Exchange (Legacy Support)
+The repository also contains the LBank/CCXT execution path and its reconciliation
+logic. Only select an exchange accepted by the current configuration validator.
+
+### Execution safety
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `ENABLE_AUTO_EXECUTION` | `false` | Master execution switch. |
+| `TRADING_MODE` | `sandbox` | `sandbox` or `live`. |
+| `LIVE_TRADING_CONFIRMATION` | blank | Must equal `I_UNDERSTAND_REAL_MONEY_TRADING` for live automation. |
+| `EXECUTION_MARKET_TYPE` | `spot` | `spot` or `swap`; set explicitly for automatic execution. |
+| `MARGIN_MODE` | `isolated` | `isolated` or `cross` where supported. |
+| `ORDER_QUOTE`, `ORDER_NOTIONAL` | `USDT`, `10` | Quote asset and positive quote amount per entry. |
+| `MAX_PRICE_DEVIATION_PCT` | `0.02` | Maximum signal-entry versus fresh-price deviation. |
+| `REQUIRE_PROTECTIVE_ORDERS` | `true` | Require protection and safe compensation where supported. |
+| `TICKER_MAX_AGE_SECS` | `15` | Maximum acceptable ticker age. |
+| `BALANCE_BUFFER_PCT`, `MAX_LEVERAGE` | `0.01`, `5` | Balance reserve and leverage ceiling. |
+| `EXCHANGE_TIMEOUT_SECS` | `30` | Exchange request timeout. |
+
+Automatic mode additionally requires automatic signal approval, a non-empty token
+allowlist, matching exchange credentials, and the live confirmation when applicable.
+
+## Runtime, database, and logging
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `HEARTBEAT_SECS`, `MAX_BACKOFF_SECS` | `180`, `300` | Health interval and reconnect ceiling. |
+| `SQL_BUSY_RETRIES`, `SQL_BUSY_SLEEP` | `10`, `0.2` | SQLite lock retries and delay. |
+| `BLOCKING_WORKERS`, `BLOCKING_QUEUE_LIMIT` | `4`, `16` | Bounded worker threads and queue size. |
+| `BLOCKING_SUBMIT_TIMEOUT_SECS` | `5` | Maximum wait to enter the worker queue. |
+| `BLOCKING_OPERATION_TIMEOUT_SECS` | `60` | Blocking operation timeout. |
+| `BACKFILL_MAX_ATTEMPTS`, `BACKFILL_PAGE_SIZE` | `3`, `100` | Recovery attempts and page size. |
+| `BACKFILL_RETRY_BASE_SECS` | `1` | Backfill retry base delay. |
+| `BACKFILL_FAILURE_POLICY` | `continue_live` | Continue monitoring or stop after exhausted retries. |
+| `HEARTBEAT_FAILURE_THRESHOLD` | `3` | Failures before reconnecting. |
+| `AUTH_RETRY_MAX_ATTEMPTS` | `3` | Transient authentication retry limit. |
+| `LOG_LEVEL` | `INFO` | Console and file log threshold. |
+| `LOG_FILE` | `./output/logs/bot.log` | Rotating log destination. |
+| `LOG_BACKUP_COUNT` | `14` | Retained rotated log files. |
+
+Main SQLite tables include `messages`, `media_files`, `trade_signals`,
+`signal_extraction_jobs`, `positions_submitted`, position events, and protective
+orders. See [`internal/db/MIGRATIONS.md`](internal/db/MIGRATIONS.md) for backup and
+rollback guidance.
+
+## Tests and diagnostics
+
+Run the offline automated suite with:
+
 ```bash
-LBANK_API_KEY=your_lbank_api_key
-LBANK_SECRET=your_lbank_secret
-LBANK_PASSWORD=your_lbank_password
+python -m unittest discover -s tests -v
 ```
 
-#### Trading Configuration
-```bash
-ORDER_QUOTE=USDT
-ORDER_NOTIONAL=10
-MAX_PRICE_DEVIATION_PCT=0.02
-ENABLE_AUTO_EXECUTION=1  # 0 to disable, 1 to enable
-```
+Tests use mocked external services. `cmd/test/openai_sample.py` is an explicitly
+manual network diagnostic and is not part of CI.
 
-#### Database and Storage
-```bash
-DB_PATH=./tg_channel.db
-MEDIA_DIR=./output/media
-BACKFILL=3
-```
+Live exchange checks require credentials and explicit test selection. Never use a
+production account for development diagnostics.
 
-#### Logging Configuration
-```bash
-LOG_LEVEL=INFO
-LOG_FILE=./output/logs/bot.log
-LOG_BACKUP_COUNT=14
-```
+## Security and operations
 
-#### System Configuration
-```bash
-HEARTBEAT_SECS=180
-MAX_BACKOFF_SECS=300
-SQL_BUSY_RETRIES=10
-SQL_BUSY_SLEEP=0.2
-```
+- Keep `.env`, Telegram session files, the database, media, and logs private.
+- Disable withdrawals on exchange API keys and use separate sandbox credentials.
+- Back up the SQLite database before upgrades and retain migration rollback copies.
+- Monitor disk usage, extraction retries, reconciliation/manual-review states, and
+  exchange/OpenAI rate limits.
+- Do not automatically resubmit an order whose exchange outcome is ambiguous.
 
-## Exchange Support
+## License
 
-### XT Exchange (Primary)
-- **Type**: Futures trading
-- **Features**: Leverage, stop losses, take profits, cross/isolated margin
-- **Proxy**: Optional
-- **Symbol Format**: BTC/USDT:USDT (linear perpetuals)
-
-### Bitunix Exchange
-- **Type**: Futures trading  
-- **Features**: Leverage, stop losses, take profits
-- **Proxy**: Optional (but recommended for reliability)
-- **Symbol Format**: BTCUSDT (concatenated)
-
-### LBank Exchange (Legacy)
-- **Type**: Spot and futures
-- **Status**: Supported but not actively used for order execution
-- **Proxy**: Optional
-
-## Order Sizing
-
-The bot automatically calculates order quantities using:
-- **Formula**: `quantity = (90% of available balance) / current_price`
-- **Minimum Budget**: $10 USD equivalent
-- **Validation**: Orders below $10 budget are rejected with error logging
-
-## Usage
-
-### 1. Install Dependencies
-```bash
-pip install -r requirements.txt
-```
-
-### 2. Configure Environment
-Create a `.env` file with your configuration:
-```bash
-cp .env.example .env
-# Edit .env with your values
-```
-
-### 3. Run the Bot
-```bash
-python app.py
-```
-
-### 4. First Run Authorization
-- Enter your phone number when prompted
-- Enter the verification code sent to your Telegram
-- Enter 2FA password if enabled
-
-## Testing and Debugging
-
-### Live Exchange Testing
-```bash
-# Test XT exchange (requires XT_API_KEY, XT_SECRET)
-pytest -m live cmd/test/test_xt_live.py -p no:debugging
-
-# Test Bitunix exchange (requires BITUNIX_API_KEY, BITUNIX_SECRET)
-pytest -m live cmd/test/test_bitunix_live.py -p no:debugging
-```
-
-### Signal Extraction Testing
-```bash
-# Extract signal from a specific message ID
-python cmd/test/extract_signal_for_message.py <message_id>
-
-# List available channels
-python cmd/test/list_channels.py
-```
-
-### Test Configuration
-Set these environment variables for testing:
-```bash
-TEST_TOKEN=ALGO        # Token to test with
-TEST_BUDGET_USDT=2     # Budget for test orders
-TEST_LEVERAGE=2        # Leverage for test orders
-```
-
-## Architecture
-
-The bot follows Clean Architecture principles:
-
-```
-telegram-trading-bot/
-├── cmd/                    # Application entry points
-│   ├── bot/               # Main bot application
-│   └── test/              # Testing utilities
-├── internal/              # Core business logic
-│   ├── types/            # Domain models and context
-│   ├── services/         # Business logic and use cases
-│   │   ├── exchange_*.py # Exchange implementations
-│   │   ├── signal_extraction.py
-│   │   ├── order_sizing.py
-│   │   └── openai_client.py
-│   ├── repositories/     # Data access layer
-│   └── db/              # Database utilities
-├── api/                  # External interfaces
-│   └── telegram/        # Telegram handlers and client
-├── configs/             # Configuration management
-├── pkg/                 # Shared utilities
-└── output/              # Generated files and logs
-```
-
-## Database Schema
-
-The bot uses SQLite with the following main tables:
-
-- **`messages`**: Stores all Telegram messages with metadata
-- **`media_files`**: Stores downloaded media file information
-- **`trade_signals`**: Stores extracted trading signals from OpenAI
-- **`positions_submitted`**: Tracks submitted trading positions and results
-
-## Signal Extraction
-
-The bot uses OpenAI's API to extract trading signals from messages and images. 
-
-### Extracted Information
-- **Token/Symbol**: Cryptocurrency symbol (e.g., BTC, ETH)
-- **Position Type**: Long or short position
-- **Entry Price**: Target entry price
-- **Leverage**: Position leverage (default: 2x if not specified)
-- **Stop Losses**: Array of stop loss prices
-- **Take Profits**: Array of take profit prices
-
-### Special Token Handling
-- **Gold Symbols**: `GOLD`, `XAU`, `XAUUSD` are automatically converted to `PAXG` for crypto trading
-
-### Custom Prompts
-Each channel can have a custom prompt to improve signal extraction accuracy:
-```json
-{
-  "channel_id": "@signals_channel",
-  "prompt": "Extract trading signals from crypto analysis. Focus on entry points and risk management."
-}
-```
-
-## Error Handling
-
-The bot includes robust error handling with:
-
-- **Automatic Reconnection**: Exponential backoff for connection failures
-- **Flood Wait Handling**: Automatic delays for Telegram rate limits  
-- **Database Retry Logic**: Handles concurrent access and busy database
-- **Exchange Error Handling**: Retry logic for transient exchange errors
-- **Graceful Degradation**: Continues operation when optional services fail
-
-## Logging
-
-The bot provides comprehensive structured logging:
-
-### Log Levels
-- **INFO**: Normal operation, signal extraction, order execution
-- **WARNING**: Non-critical issues, retries, degraded functionality  
-- **ERROR**: Failed operations, invalid configurations
-- **DEBUG**: Detailed debugging information
-
-### Log Rotation
-- **File**: `./output/logs/bot.log`
-- **Rotation**: Daily rotation with 14-day retention
-- **Format**: Structured JSON logs for easy parsing
-
-### Key Log Events
-- Message processing and signal extraction
-- Order execution and results
-- Exchange API interactions
-- Error conditions and recovery attempts
-- Channel monitoring status
-
-## Security Considerations
-
-### API Keys and Secrets
-- Store API keys securely using environment variables
-- Never commit secrets to version control
-- Use separate API keys for testing and production
-- Consider using encrypted environment files
-
-### Data Security
-- Database files contain sensitive trading information
-- Media files may contain private channel content
-- Log files may contain API responses with sensitive data
-- Consider encryption for production deployments
-
-### Network Security
-- Use HTTPS for all external API calls
-- Configure proxy settings for enhanced privacy
-- Validate all external inputs and API responses
-- Implement rate limiting to prevent abuse
-
-## Production Deployment
-
-### Recommended Setup
-1. **Environment**: Use Docker or virtual environment
-2. **Process Management**: Use systemd, supervisor, or PM2
-3. **Monitoring**: Set up log monitoring and alerting
-4. **Backups**: Regular database and configuration backups
-5. **Security**: Firewall, encrypted storage, secure API keys
-
-### Performance Considerations
-- **Database**: Regular VACUUM and optimization
-- **Logging**: Configure appropriate log levels for production
-- **Memory**: Monitor memory usage for long-running processes
-- **API Limits**: Respect exchange and OpenAI rate limits
-
-## Troubleshooting
-
-### Common Issues
-
-#### "No channels configured" Error
-- Ensure `CHANNELS_CONFIG` or `CHANNELS_FILE` is properly set
-- Check JSON syntax in channel configuration
-
-#### "Proxy required" Warning (Bitunix)
-- Proxy is now optional for Bitunix
-- Configure proxy if experiencing connection issues
-
-#### "Budget below minimum threshold" Error
-- Ensure account has more than $10 equivalent balance
-- Check `ORDER_QUOTE` currency matches exchange balance
-
-#### Signal Extraction Failures
-- Verify `OPENAI_API_KEY` is valid and has credits
-- Check `UPLOAD_BASE` service is running for image processing
-- Review custom channel prompts for clarity
-
-### Debug Tools
-```bash
-# Check signal extraction for specific message
-python cmd/test/extract_signal_for_message.py <message_id>
-
-# Test exchange connectivity
-pytest -m live cmd/test/test_bitunix_live.py::test_fetch_price -s
-
-# View detailed logs
-tail -f output/logs/bot.log
-``` 
+MIT. See [`LICENSE`](LICENSE).
